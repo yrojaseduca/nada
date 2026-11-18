@@ -36,3 +36,16 @@ foreach ($migrations as $migration) {
         throw $exception;
     }
 }
+
+$superadminEmail = getenv('SUPERADMIN_EMAIL') ?: 'admin@nada.local';
+$superadminPassword = getenv('SUPERADMIN_PASSWORD') ?: '';
+
+if ($superadminPassword !== '') {
+    $insert = $pdo->prepare('INSERT INTO users (email, name, password_hash, active, is_superadmin) VALUES (:email, :name, :password_hash, 1, 1) ON DUPLICATE KEY UPDATE is_superadmin = 1');
+    $insert->execute([
+        'email' => $superadminEmail,
+        'name' => 'Superadmin Nada',
+        'password_hash' => password_hash($superadminPassword, PASSWORD_DEFAULT),
+    ]);
+    printf("Superadmin ready: %s\n", $superadminEmail);
+}

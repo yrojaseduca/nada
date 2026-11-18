@@ -1,0 +1,18 @@
+{
+    "name": "Nada",
+    "short_name": "Nada",
+    "description": "Nada que ponerte. Todo por combinar.",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#F8F5F0",
+    "theme_color": "#4D5145",
+    "lang": "es",
+    "icons": [
+        { "src": "/icons/nada-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "/icons/nada-logo.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+    ],
+    "screenshots": [
+        { "src": "/screenshots/login-wide.png", "sizes": "1920x1280", "type": "image/png", "form_factor": "wide" },
+        { "src": "/screenshots/login-mobile.png", "sizes": "720x1280", "type": "image/png" }
+    ]
+}

@@ -74,3 +74,12 @@ Flujo esperado de backend:
 - Para cambios frontend, validar con `make frontend-build` cuando el cambio toque componentes, stores, servicios o build.
 - Si se crean o modifican migraciones, el siguiente paso operativo es `make db-migrate`.
 
+## Convenciones de API
+
+- Mantener `backend/src/Routes/api.php` como registro de rutas y composición de dependencias; no añadir SQL ni lógica de negocio directamente en los closures.
+- Reutilizar helpers compartidos para leer payloads, autenticar usuarios y validar entradas repetidas.
+- Delegar reglas de negocio y persistencia en `Services` y `Repositories`.
+- Todas las rutas privadas deben pasar por `authenticatedUser()` y limitar las consultas al usuario autenticado.
+- Las respuestas JSON deben utilizar `JsonResponse::send()`.
+- Las subidas de imágenes deben validarse mediante helpers comunes y almacenarse fuera del directorio público.
+

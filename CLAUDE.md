@@ -22,3 +22,11 @@ ParkPass es una Terminal web para recepción y validación de tickets, configura
 - Validate backend with `make test` or `make test-docker` when relevant.
 - Validate frontend with `make frontend-build` when relevant.
 
+## API conventions
+
+- Keep `backend/src/Routes/api.php` focused on route registration and dependency composition.
+- Reuse shared helpers for request payloads, authentication, validation and file uploads.
+- Keep SQL and business rules in services or repositories, never in route closures.
+- Protect private routes with the authenticated user and scope every query to that user.
+- Use `JsonResponse::send()` for JSON responses.
+

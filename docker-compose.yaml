@@ -21,6 +21,8 @@ services:
       PUSHER_APP_KEY: ${PUSHER_APP_KEY:-}
       PUSHER_APP_SECRET: ${PUSHER_APP_SECRET:-}
       PUSHER_APP_CLUSTER: ${PUSHER_APP_CLUSTER:-eu}
+      SUPERADMIN_EMAIL: ${SUPERADMIN_EMAIL:-admin@nada.local}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
       PHP_IDE_CONFIG: serverName=localhost
     extra_hosts:
       - "host.docker.internal:host-gateway"

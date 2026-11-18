@@ -11,7 +11,7 @@ final class AuthService
 {
     public function login(string $email, string $password): array
     {
-        $statement = Connection::create()->prepare('SELECT id, email, name, password_hash FROM users WHERE email = :email AND active = 1 LIMIT 1');
+        $statement = Connection::create()->prepare('SELECT id, email, name, is_superadmin, password_hash FROM users WHERE email = :email AND active = 1 LIMIT 1');
         $statement->execute(['email' => strtolower(trim($email))]);
         $user = $statement->fetch();
 
@@ -36,7 +36,7 @@ final class AuthService
     public function userFromToken(string $token): ?array
     {
         $statement = Connection::create()->prepare(
-            'SELECT u.id, u.email, u.name FROM auth_tokens t INNER JOIN users u ON u.id = t.user_id WHERE t.token_hash = :token_hash AND t.expires_at > NOW() AND u.active = 1 LIMIT 1'
+            'SELECT u.id, u.email, u.name, u.is_superadmin FROM auth_tokens t INNER JOIN users u ON u.id = t.user_id WHERE t.token_hash = :token_hash AND t.expires_at > NOW() AND u.active = 1 LIMIT 1'
         );
         $statement->execute(['token_hash' => hash('sha256', $token)]);
         $user = $statement->fetch();
@@ -48,5 +48,14 @@ final class AuthService
     {
         $statement = Connection::create()->prepare('DELETE FROM auth_tokens WHERE token_hash = :token_hash');
         $statement->execute(['token_hash' => hash('sha256', $token)]);
+    }
+
+    public function updateUser(int $userId, string $name, string $email): array
+    {
+        $statement = Connection::create()->prepare('UPDATE users SET name = :name, email = :email WHERE id = :id');
+        $statement->execute(['id' => $userId, 'name' => trim($name), 'email' => strtolower(trim($email))]);
+        $user = Connection::create()->prepare('SELECT id, email, name, is_superadmin FROM users WHERE id = :id');
+        $user->execute(['id' => $userId]);
+        return (array) $user->fetch();
     }
 }
