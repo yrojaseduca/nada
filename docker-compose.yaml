@@ -64,6 +64,7 @@ services:
       - ./default.conf.template:/etc/nginx/conf.d/default.conf
       # OPCIONAL: Para DEV mapeamos los archivos estáticos en vivo si hiciera falta
       - ./frontend/dist:/var/www/frontend
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     depends_on:
       php:
         condition: service_started
