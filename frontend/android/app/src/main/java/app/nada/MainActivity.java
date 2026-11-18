@@ -1,4 +1,4 @@
-package app.nido;
+package app.nada;
 
 import android.content.pm.ApplicationInfo;
 import android.os.Bundle;
@@ -44,7 +44,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        // Nido can define its mobile back-navigation policy here.
+        // Nada can define its mobile back-navigation policy here.
     }
 
     private void enableKioskDisplay() {

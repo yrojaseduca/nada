@@ -8,8 +8,8 @@ use PHPUnit\Framework\TestCase;
 
 final class TemplateTest extends TestCase
 {
-    public function testTheNidoTemplateIsReady(): void
+    public function testTheNadaTemplateIsReady(): void
     {
-        self::assertSame('nido', 'nido');
+        self::assertSame('nada', 'nada');
     }
 }

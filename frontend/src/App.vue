@@ -1,5 +1,5 @@
 <script setup>
-const appName = 'Nido';
+const appName = 'Nada';
 </script>
 
 <template>

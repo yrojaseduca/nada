@@ -6,7 +6,7 @@ set -euo pipefail
 
 REGISTRY=dr.epc-app.com
 PROJECT_NAMESPACE=yrojas
-PROJECT_NAME=nido
+PROJECT_NAME=nada
 VERSION=$(date +"%Y.%m.%d-%H.%M")
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

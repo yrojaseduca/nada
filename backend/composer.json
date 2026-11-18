@@ -1,6 +1,6 @@
 {
-  "name": "nido/backend",
-  "description": "Nido SaaS backend",
+  "name": "nada/backend",
+  "description": "Nada backend",
   "license": "proprietary",
   "type": "project",
   "require": {

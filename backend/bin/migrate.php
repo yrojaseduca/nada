@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 $host = getenv('DB_HOST') ?: 'mariadb';
 $port = getenv('DB_PORT') ?: '3306';
-$database = getenv('DB_DATABASE') ?: 'nido';
-$username = getenv('DB_USERNAME') ?: 'nido';
-$password = getenv('DB_PASSWORD') ?: 'nido';
+$database = getenv('DB_DATABASE') ?: 'nada';
+$username = getenv('DB_USERNAME') ?: 'nada';
+$password = getenv('DB_PASSWORD') ?: 'nada';
 $dsn = sprintf('mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4', $host, $port, $database);
 
 $pdo = new PDO($dsn, $username, $password, [
