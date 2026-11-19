@@ -116,8 +116,8 @@ onMounted(async () => {
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div><p class="text-sm text-[#8E7472]">Estilista inteligente</p><h3 class="mt-1 text-xl font-semibold">Que decida alguien. Aunque sea un algoritmo.</h3></div>
                 <div class="grid gap-2 sm:grid-cols-4">
-                    <select v-model="suggestionOccasion" class="rounded-xl border border-[#E9D9C9] px-3 py-2 text-sm"><option>diario</option><option>oficina</option><option>evento</option><option>viaje</option></select>
-                    <select v-model="suggestionStyle" class="rounded-xl border border-[#E9D9C9] px-3 py-2 text-sm"><option>casual</option><option>elegante</option><option>minimalista</option><option>cómodo</option></select>
+                    <select v-model="suggestionOccasion" class="rounded-xl border border-[#E9D9C9] px-3 py-2 pr-8 text-sm"><option>diario</option><option>oficina</option><option>evento</option><option>viaje</option></select>
+                    <select v-model="suggestionStyle" class="rounded-xl border border-[#E9D9C9] px-3 py-2 pr-8 text-sm"><option>casual</option><option>elegante</option><option>minimalista</option><option>cómodo</option></select>
                     <input v-model="suggestionSeason" class="rounded-xl border border-[#E9D9C9] px-3 py-2 text-sm" placeholder="Temporada" />
                     <button class="rounded-xl bg-[#4D5145] px-4 py-2 text-sm text-white" @click="suggest">Sugerirme un look</button>
                     <button class="rounded-xl border border-[#E9D9C9] px-4 py-2 text-xs text-[#4D5145]" @click="savePreferences">Guardar preferencias</button>
@@ -143,10 +143,10 @@ onMounted(async () => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="text-xl font-semibold">Looks guardados</h3>
                 <div class="flex flex-wrap gap-2">
-                    <select v-model="filterOccasion" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)">
+                    <select v-model="filterOccasion" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 pr-8 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)">
                         <option value="">Todas las ocasiones</option><option>diario</option><option>oficina</option><option>evento</option><option>viaje</option>
                     </select>
-                    <select v-model="filterStyle" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)">
+                    <select v-model="filterStyle" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 pr-8 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)">
                         <option value="">Todos los estilos</option><option>casual</option><option>elegante</option><option>minimalista</option><option>cómodo</option>
                     </select>
                     <input v-model="filterSeason" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" placeholder="Temporada" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)" />
@@ -177,8 +177,8 @@ onMounted(async () => {
                 <div class="flex justify-between"><h3 class="text-xl font-semibold">{{ editing ? 'Editar look' : 'Crear look' }}</h3><button @click="showForm = false">×</button></div>
                 <div class="mt-5 grid gap-4 sm:grid-cols-2">
                     <input v-model="form.name" class="rounded-xl border border-[#E9D9C9] px-4 py-3 sm:col-span-2" placeholder="Nombre del look" />
-                    <select v-model="form.occasion" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-3"><option>diario</option><option>oficina</option><option>evento</option><option>viaje</option></select>
-                    <select v-model="form.style" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-3"><option>casual</option><option>elegante</option><option>minimalista</option><option>cómodo</option></select>
+                <select v-model="form.occasion" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-3 pr-8"><option>diario</option><option>oficina</option><option>evento</option><option>viaje</option></select>
+                <select v-model="form.style" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-3 pr-8"><option>casual</option><option>elegante</option><option>minimalista</option><option>cómodo</option></select>
                     <input v-model="form.season" class="rounded-xl border border-[#E9D9C9] px-4 py-3" placeholder="Temporada (opcional)" />
                     <textarea v-model="form.notes" class="rounded-xl border border-[#E9D9C9] px-4 py-3" placeholder="Notas (opcional)" rows="2" />
                 </div>

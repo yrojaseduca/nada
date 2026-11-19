@@ -56,7 +56,7 @@ const selectImage = (event) => {
         <div class="grid grid-cols-2 gap-3">
             <div>
                 <label class="text-sm font-medium" for="garment-category">Categoría</label>
-                <select id="garment-category" v-model="form.category" class="mt-1 w-full rounded-xl border border-[#E9D9C9] bg-white px-3 py-3">
+                <select id="garment-category" v-model="form.category" class="mt-1 w-full rounded-xl border border-[#E9D9C9] bg-white px-3 py-3 pr-8">
                     <option value="top">Parte superior</option><option value="bottom">Pantalón o falda</option><option value="dress">Vestido o mono</option><option value="outerwear">Chaqueta o abrigo</option><option value="shoes">Zapatos</option><option value="accessories">Accesorio</option>
                 </select>
             </div>
