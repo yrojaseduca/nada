@@ -167,3 +167,7 @@ composer-install:
 npm-install:
 	@echo "📦 Instalando dependencias del frontend..."
 	docker compose exec node npm install
+
+db-migrate:
+	@echo "🗃️ Ejecutando migraciones de base de datos..."
+	$(COMPOSE_PROD) exec php php bin/migrate.php

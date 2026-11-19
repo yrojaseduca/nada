@@ -10,12 +10,13 @@ use RuntimeException;
 
 final class OutfitService
 {
-    public function list(int $userId, ?string $occasion = null, ?string $style = null): array
+    public function list(int $userId, ?string $occasion = null, ?string $style = null, ?string $season = null): array
     {
         $conditions = ['user_id = :user_id'];
         $parameters = ['user_id' => $userId];
         if ($occasion !== null && $occasion !== '') { $conditions[] = 'occasion = :occasion'; $parameters['occasion'] = $occasion; }
         if ($style !== null && $style !== '') { $conditions[] = 'style = :style'; $parameters['style'] = $style; }
+        if ($season !== null && $season !== '') { $conditions[] = 'season = :season'; $parameters['season'] = $season; }
         $statement = Connection::create()->prepare(sprintf('SELECT * FROM outfits WHERE %s ORDER BY created_at DESC', implode(' AND ', $conditions)));
         $statement->execute($parameters);
         $outfits = $statement->fetchAll(PDO::FETCH_ASSOC);

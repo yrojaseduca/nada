@@ -7,11 +7,13 @@ const request = async (path, options = {}) => {
 };
 
 export const outfitService = {
-    list: (occasion = '', style = '') => request(`/outfits?occasion=${encodeURIComponent(occasion)}&style=${encodeURIComponent(style)}`),
+    list: (occasion = '', style = '', season = '') => request(`/outfits?occasion=${encodeURIComponent(occasion)}&style=${encodeURIComponent(style)}&season=${encodeURIComponent(season)}`),
     create: (data) => request('/outfits', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request(`/outfits/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     remove: (id) => request(`/outfits/${id}`, { method: 'DELETE' }),
     toggleFavorite: (id) => request(`/outfits/${id}/favorite`, { method: 'POST' })
     ,
-    suggestions: (occasion, style, season) => request(`/outfits/suggestions?occasion=${encodeURIComponent(occasion || '')}&style=${encodeURIComponent(style || '')}&season=${encodeURIComponent(season || '')}`)
+    suggestions: (occasion, style, season) => request(`/outfits/suggestions?occasion=${encodeURIComponent(occasion || '')}&style=${encodeURIComponent(style || '')}&season=${encodeURIComponent(season || '')}`),
+    preferences: () => request('/preferences'),
+    updatePreferences: (data) => request('/preferences', { method: 'PATCH', body: JSON.stringify(data) })
 };

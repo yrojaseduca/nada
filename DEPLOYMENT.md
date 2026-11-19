@@ -2,6 +2,25 @@
 
 Guía para desplegar Nada en Ubuntu/Droplet usando Docker Compose, dominio y HTTPS con Let's Encrypt.
 
+## Regla operativa
+
+Los comandos habituales del proyecto deben ejecutarse mediante el `Makefile`. Esto mantiene el flujo de desarrollo, producción, migraciones, tests y build centralizado y consistente.
+
+Comandos principales:
+
+```bash
+make status
+make prod-up
+make prod-build
+make test
+make test-unit
+make test-docker
+make frontend-build
+make logs
+```
+
+Los comandos `docker compose` directos quedan reservados para diagnósticos, recuperación del servicio o cuando el `Makefile` todavía no cubra una operación concreta. Actualmente la ejecución de migraciones no tiene un target implementado en el `Makefile`, por lo que debe documentarse o añadirse antes de convertirla en un comando operativo estándar.
+
 ## 1. Instalar Docker
 
 Ejecutar en el servidor como `root`:

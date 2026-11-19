@@ -10,6 +10,7 @@ use App\Services\GarmentService;
 use App\Services\UserManagementService;
 use App\Services\OutfitService;
 use App\Services\OutfitRecommendationService;
+use App\Services\UserPreferenceService;
 
 return static function (Base $f3): void {
     $f3->route('GET /api/health', static function (): void {
@@ -28,6 +29,7 @@ return static function (Base $f3): void {
     $users = new UserManagementService();
     $outfits = new OutfitService();
     $recommendations = new OutfitRecommendationService();
+    $preferences = new UserPreferenceService();
 
     $f3->route('POST /api/auth/login', static function () use ($auth): void {
         $payload = requestPayload();
@@ -91,12 +93,30 @@ return static function (Base $f3): void {
 
     $f3->route('GET /api/outfits', static function () use ($auth, $outfits): void {
         $user = authenticatedUser($auth);
-        JsonResponse::send(['data' => $outfits->list((int) $user['id'], $_GET['occasion'] ?? null, $_GET['style'] ?? null)]);
+        JsonResponse::send(['data' => $outfits->list((int) $user['id'], $_GET['occasion'] ?? null, $_GET['style'] ?? null, $_GET['season'] ?? null)]);
     });
 
-    $f3->route('GET /api/outfits/suggestions', static function () use ($auth, $recommendations): void {
+    $f3->route('GET /api/preferences', static function () use ($auth, $preferences): void {
         $user = authenticatedUser($auth);
-        JsonResponse::send($recommendations->suggest((int) $user['id'], $_GET['occasion'] ?? null, $_GET['style'] ?? null, $_GET['season'] ?? null));
+        JsonResponse::send(['data' => $preferences->get((int) $user['id'])]);
+    });
+
+    $f3->route('PATCH /api/preferences', static function () use ($auth, $preferences): void {
+        $user = authenticatedUser($auth);
+        $payload = requestPayload();
+        JsonResponse::send(['data' => $preferences->update((int) $user['id'], $payload['preferred_style'] ?? null, $payload['preferred_season'] ?? null)]);
+    });
+
+    $f3->route('GET /api/outfits/suggestions', static function () use ($auth, $recommendations, $preferences): void {
+        $user = authenticatedUser($auth);
+        $style = $_GET['style'] ?? null;
+        $season = $_GET['season'] ?? null;
+        if (($style === null || $style === '') || ($season === null || $season === '')) {
+            $saved = $preferences->get((int) $user['id']);
+            $style = $style ?: ($saved['preferred_style'] ?? null);
+            $season = $season ?: ($saved['preferred_season'] ?? null);
+        }
+        JsonResponse::send($recommendations->suggest((int) $user['id'], $_GET['occasion'] ?? null, $style, $season));
     });
 
     $f3->route('POST /api/outfits', static function () use ($auth, $outfits): void {

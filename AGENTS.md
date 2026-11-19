@@ -7,6 +7,8 @@
 - Mantener 4 espacios de indentacion en PHP, Vue, JavaScript y CSS.
 - No inventar comandos de framework que no existan en este repo. Este proyecto no usa Laravel ni Artisan.
 - Antes de proponer o ejecutar comandos, revisar el `Makefile` de la raiz.
+- Para operaciones del proyecto, usar primero los targets existentes del `Makefile` (`make status`, `make prod-up`, `make prod-build`, `make test`, `make test-unit`, `make test-docker`, `make frontend-build` y `make logs`). No sustituirlos por comandos `docker compose` directos salvo para diagnostico o cuando no exista un target equivalente.
+- No inventar targets del `Makefile`: comprobar que el target existe antes de proponerlo o ejecutarlo.
 - Mantener los cambios acotados al modulo afectado.
 - No hacer refactors amplios si no son necesarios para la tarea.
 - No tocar configuracion de Docker, Nginx, PHP o Node fuera de `docker/` salvo que la tarea lo pida explicitamente.

@@ -8,12 +8,14 @@ export const useOutfitStore = defineStore('outfits', () => {
     const error = ref('');
     const suggestions = ref([]);
     const suggestionMessage = ref('');
+    const suggestionError = ref('');
+    const preferences = ref({ preferred_style: '', preferred_season: '' });
 
-    const loadOutfits = async (occasion = '', style = '') => {
+    const loadOutfits = async (occasion = '', style = '', season = '') => {
         loading.value = true;
         error.value = '';
         try {
-            outfits.value = (await outfitService.list(occasion, style)).data || [];
+            outfits.value = (await outfitService.list(occasion, style, season)).data || [];
         } catch (requestError) {
             error.value = requestError.message;
         } finally {
@@ -57,10 +59,27 @@ export const useOutfitStore = defineStore('outfits', () => {
     };
 
     const loadSuggestions = async (occasion, style, season) => {
-        const response = await outfitService.suggestions(occasion, style, season);
-        suggestions.value = response.data || [];
-        suggestionMessage.value = response.message || '';
+        suggestionError.value = '';
+        suggestionMessage.value = '';
+        try {
+            const response = await outfitService.suggestions(occasion, style, season);
+            suggestions.value = response.data || [];
+            suggestionMessage.value = response.message || '';
+        } catch (requestError) {
+            suggestions.value = [];
+            suggestionError.value = requestError.message;
+        }
     };
 
-    return { outfits, loading, error, suggestions, suggestionMessage, loadOutfits, createOutfit, updateOutfit, removeOutfit, duplicateOutfit, toggleFavorite, loadSuggestions };
+    const loadPreferences = async () => {
+        const response = await outfitService.preferences();
+        preferences.value = response.data || preferences.value;
+    };
+
+    const updatePreferences = async (data) => {
+        const response = await outfitService.updatePreferences(data);
+        preferences.value = response.data || preferences.value;
+    };
+
+    return { outfits, loading, error, suggestions, suggestionMessage, suggestionError, preferences, loadOutfits, createOutfit, updateOutfit, removeOutfit, duplicateOutfit, toggleFavorite, loadSuggestions, loadPreferences, updatePreferences };
 });

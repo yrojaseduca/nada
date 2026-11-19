@@ -12,6 +12,7 @@ const favoriteOnly = ref(false);
 const category = ref('');
 const filterOccasion = ref('');
 const filterStyle = ref('');
+const filterSeason = ref('');
 const suggestionOccasion = ref('diario');
 const suggestionStyle = ref('casual');
 const suggestionSeason = ref('');
@@ -65,25 +66,37 @@ const suggest = async () => {
     await outfits.loadSuggestions(suggestionOccasion.value, suggestionStyle.value, suggestionSeason.value);
 };
 const saveSuggestion = async (suggestion) => {
-    await outfits.createOutfit({
-        name: `Look ${suggestionOccasion.value}`,
-        occasion: suggestionOccasion.value,
-        style: suggestionStyle.value,
-        season: suggestionSeason.value,
-        source: 'recommended',
-        notes: suggestion.reason,
-        garment_ids: suggestion.garments.map((garment) => garment.id)
-    });
-    message.value = 'Recomendación guardada. Resulta que sí tenías algo que ponerte.';
+    try {
+        await outfits.createOutfit({
+            name: `Look ${suggestionOccasion.value}`,
+            occasion: suggestionOccasion.value,
+            style: suggestionStyle.value,
+            season: suggestionSeason.value,
+            source: 'recommended',
+            notes: suggestion.reason,
+            garment_ids: suggestion.garments.map((garment) => garment.id)
+        });
+        message.value = 'Recomendación guardada. Resulta que sí tenías algo que ponerte.';
+        window.setTimeout(() => { message.value = ''; }, 4000);
+    } catch (error) {
+        outfits.suggestionError = error.message;
+    }
+};
+const savePreferences = async () => {
+    await outfits.updatePreferences({ preferred_style: suggestionStyle.value, preferred_season: suggestionSeason.value });
+    message.value = 'Preferencias guardadas. El estilista ya sabe por dónde empezar.';
     window.setTimeout(() => { message.value = ''; }, 4000);
 };
 const replaceSuggestionGarment = (suggestion, garmentId, replacement) => {
     const index = suggestion.garments.findIndex((garment) => garment.id === garmentId);
     if (index !== -1) suggestion.garments[index] = replacement;
 };
-onMounted(() => {
+onMounted(async () => {
     outfits.loadOutfits();
     if (!wardrobe.garments.length) wardrobe.loadGarments();
+    await outfits.loadPreferences();
+    suggestionStyle.value = outfits.preferences.preferred_style || suggestionStyle.value;
+    suggestionSeason.value = outfits.preferences.preferred_season || suggestionSeason.value;
 });
 </script>
 
@@ -107,9 +120,11 @@ onMounted(() => {
                     <select v-model="suggestionStyle" class="rounded-xl border border-[#E9D9C9] px-3 py-2 text-sm"><option>casual</option><option>elegante</option><option>minimalista</option><option>cómodo</option></select>
                     <input v-model="suggestionSeason" class="rounded-xl border border-[#E9D9C9] px-3 py-2 text-sm" placeholder="Temporada" />
                     <button class="rounded-xl bg-[#4D5145] px-4 py-2 text-sm text-white" @click="suggest">Sugerirme un look</button>
+                    <button class="rounded-xl border border-[#E9D9C9] px-4 py-2 text-xs text-[#4D5145]" @click="savePreferences">Guardar preferencias</button>
                 </div>
             </div>
             <p v-if="outfits.suggestionMessage" class="mt-4 text-sm text-[#8E857A]">{{ outfits.suggestionMessage }}</p>
+            <p v-if="outfits.suggestionError" class="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">{{ outfits.suggestionError }}</p>
             <div v-for="suggestion in outfits.suggestions" :key="suggestion.explanation" class="mt-4 rounded-2xl bg-[#F8F5F0] p-4">
                 <p class="text-sm">{{ suggestion.explanation }}</p>
                 <p v-if="suggestion.reason" class="mt-2 text-xs text-[#8E7472]">{{ suggestion.reason }}</p>
@@ -128,12 +143,13 @@ onMounted(() => {
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="text-xl font-semibold">Looks guardados</h3>
                 <div class="flex flex-wrap gap-2">
-                    <select v-model="filterOccasion" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle)">
+                    <select v-model="filterOccasion" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)">
                         <option value="">Todas las ocasiones</option><option>diario</option><option>oficina</option><option>evento</option><option>viaje</option>
                     </select>
-                    <select v-model="filterStyle" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle)">
+                    <select v-model="filterStyle" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)">
                         <option value="">Todos los estilos</option><option>casual</option><option>elegante</option><option>minimalista</option><option>cómodo</option>
                     </select>
+                    <input v-model="filterSeason" class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" placeholder="Temporada" @change="outfits.loadOutfits(filterOccasion, filterStyle, filterSeason)" />
                     <button class="rounded-xl border border-[#E9D9C9] bg-white px-3 py-2 text-sm" @click="favoriteOnly = !favoriteOnly">♥ Favoritos</button>
                 </div>
             </div>
