@@ -37,7 +37,8 @@ final class OutfitService
         $connection = Connection::create();
         $connection->beginTransaction();
         try {
-            $statement = $connection->prepare('INSERT INTO outfits (user_id, name, occasion, style, season, notes) VALUES (:user_id, :name, :occasion, :style, :season, :notes)');
+            $this->assertGarmentsBelongToUser($connection, $userId, $garmentIds);
+            $statement = $connection->prepare('INSERT INTO outfits (user_id, name, occasion, style, season, notes, source) VALUES (:user_id, :name, :occasion, :style, :season, :notes, :source)');
             $statement->execute([
                 'user_id' => $userId,
                 'name' => trim((string) ($data['name'] ?? 'Mi look')),
@@ -45,11 +46,12 @@ final class OutfitService
                 'style' => $data['style'] ?? null,
                 'season' => $data['season'] ?? null,
                 'notes' => $data['notes'] ?? null,
+                'source' => $data['source'] ?? 'manual',
             ]);
             $outfitId = (int) $connection->lastInsertId();
-            $garmentStatement = $connection->prepare('INSERT INTO outfit_garments (outfit_id, garment_id, position) SELECT :outfit_id, id, :position FROM garments WHERE id = :garment_id AND user_id = :user_id');
+            $garmentStatement = $connection->prepare('INSERT INTO outfit_garments (outfit_id, garment_id, position, role) VALUES (:outfit_id, :garment_id, :position, :role)');
             foreach ($garmentIds as $position => $garmentId) {
-                $garmentStatement->execute(['outfit_id' => $outfitId, 'garment_id' => $garmentId, 'user_id' => $userId, 'position' => (string) $position]);
+                $garmentStatement->execute(['outfit_id' => $outfitId, 'garment_id' => $garmentId, 'position' => (string) $position, 'role' => $data['roles'][$garmentId] ?? null]);
             }
             $connection->commit();
         } catch (\Throwable $exception) {
@@ -77,11 +79,12 @@ final class OutfitService
         $connection = Connection::create();
         $connection->beginTransaction();
         try {
-            $statement = $connection->prepare('UPDATE outfits SET name = :name, occasion = :occasion, style = :style, season = :season, notes = :notes WHERE id = :id AND user_id = :user_id');
-            $statement->execute(['id' => $id, 'user_id' => $userId, 'name' => trim((string) $data['name']), 'occasion' => $data['occasion'] ?? null, 'style' => $data['style'] ?? null, 'season' => $data['season'] ?? null, 'notes' => $data['notes'] ?? null]);
+            $this->assertGarmentsBelongToUser($connection, $userId, $garmentIds);
+            $statement = $connection->prepare('UPDATE outfits SET name = :name, occasion = :occasion, style = :style, season = :season, notes = :notes, source = :source WHERE id = :id AND user_id = :user_id');
+            $statement->execute(['id' => $id, 'user_id' => $userId, 'name' => trim((string) $data['name']), 'occasion' => $data['occasion'] ?? null, 'style' => $data['style'] ?? null, 'season' => $data['season'] ?? null, 'notes' => $data['notes'] ?? null, 'source' => $data['source'] ?? 'manual']);
             $connection->prepare('DELETE FROM outfit_garments WHERE outfit_id = :outfit_id')->execute(['outfit_id' => $id]);
-            $relation = $connection->prepare('INSERT INTO outfit_garments (outfit_id, garment_id, position) SELECT :outfit_id, id, :position FROM garments WHERE id = :garment_id AND user_id = :user_id');
-            foreach ($garmentIds as $position => $garmentId) $relation->execute(['outfit_id' => $id, 'garment_id' => $garmentId, 'user_id' => $userId, 'position' => (string) $position]);
+            $relation = $connection->prepare('INSERT INTO outfit_garments (outfit_id, garment_id, position, role) VALUES (:outfit_id, :garment_id, :position, :role)');
+            foreach ($garmentIds as $position => $garmentId) $relation->execute(['outfit_id' => $id, 'garment_id' => $garmentId, 'position' => (string) $position, 'role' => $data['roles'][$garmentId] ?? null]);
             $connection->commit();
         } catch (\Throwable $exception) { $connection->rollBack(); throw $exception; }
         return $this->find($userId, $id);
@@ -103,11 +106,25 @@ final class OutfitService
 
     private function hydrate(array $outfit, int $userId): array
     {
-        $statement = Connection::create()->prepare('SELECT g.* FROM garments g INNER JOIN outfit_garments og ON og.garment_id = g.id WHERE og.outfit_id = :outfit_id AND g.user_id = :user_id ORDER BY og.position');
+        $statement = Connection::create()->prepare('SELECT g.*, og.role AS outfit_role FROM garments g INNER JOIN outfit_garments og ON og.garment_id = g.id WHERE og.outfit_id = :outfit_id AND g.user_id = :user_id ORDER BY og.position');
         $statement->execute(['outfit_id' => $outfit['id'], 'user_id' => $userId]);
         $outfit['id'] = (int) $outfit['id'];
         $outfit['is_favorite'] = (bool) $outfit['is_favorite'];
         $outfit['garments'] = $statement->fetchAll(PDO::FETCH_ASSOC);
         return $outfit;
+    }
+
+    /**
+     * @param list<int> $garmentIds
+     */
+    private function assertGarmentsBelongToUser(PDO $connection, int $userId, array $garmentIds): void
+    {
+        $placeholders = implode(',', array_fill(0, count($garmentIds), '?'));
+        $statement = $connection->prepare("SELECT COUNT(*) FROM garments WHERE user_id = ? AND id IN ($placeholders)");
+        $statement->execute([$userId, ...$garmentIds]);
+
+        if ((int) $statement->fetchColumn() !== count($garmentIds)) {
+            throw new RuntimeException('Una o más prendas no pertenecen a tu armario.');
+        }
     }
 }

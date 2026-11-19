@@ -13,5 +13,5 @@ export const outfitService = {
     remove: (id) => request(`/outfits/${id}`, { method: 'DELETE' }),
     toggleFavorite: (id) => request(`/outfits/${id}/favorite`, { method: 'POST' })
     ,
-    suggestions: (occasion, style) => request(`/outfits/suggestions?occasion=${encodeURIComponent(occasion || '')}&style=${encodeURIComponent(style || '')}`)
+    suggestions: (occasion, style, season) => request(`/outfits/suggestions?occasion=${encodeURIComponent(occasion || '')}&style=${encodeURIComponent(style || '')}&season=${encodeURIComponent(season || '')}`)
 };

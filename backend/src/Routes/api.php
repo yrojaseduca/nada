@@ -96,7 +96,7 @@ return static function (Base $f3): void {
 
     $f3->route('GET /api/outfits/suggestions', static function () use ($auth, $recommendations): void {
         $user = authenticatedUser($auth);
-        JsonResponse::send($recommendations->suggest((int) $user['id'], $_GET['occasion'] ?? null, $_GET['style'] ?? null));
+        JsonResponse::send($recommendations->suggest((int) $user['id'], $_GET['occasion'] ?? null, $_GET['style'] ?? null, $_GET['season'] ?? null));
     });
 
     $f3->route('POST /api/outfits', static function () use ($auth, $outfits): void {
