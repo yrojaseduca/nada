@@ -1,8 +1,10 @@
 const apiRequest = async (path, options = {}) => {
     const token = localStorage.getItem('nada_auth_token');
+    const { headers = {}, ...requestOptions } = options;
+    const defaultHeaders = options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' };
     const response = await fetch(`/api${path}`, {
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) },
-        ...options
+        headers: { ...defaultHeaders, ...(token ? { Authorization: `Bearer ${token}` } : {}), ...headers },
+        ...requestOptions
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
