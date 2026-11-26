@@ -290,6 +290,38 @@ return static function (Base $f3): void {
         JsonResponse::send(['data' => $garments->create((int) $user['id'], $payload)], 201);
     });
 
+    $f3->route('POST /api/garments/bulk', static function () use ($auth, $garments): void {
+        $user = authenticatedUser($auth);
+        $category = trim((string) ($_POST['category'] ?? ''));
+        $files = $_FILES['images'] ?? null;
+        if ($category === '' || !is_array($files) || !is_array($files['name'] ?? null)) {
+            JsonResponse::send(['message' => 'Selecciona una categoría y al menos una imagen.'], 422);
+        }
+
+        $created = [];
+        foreach ($files['name'] as $index => $originalName) {
+            $file = [
+                'name' => $files['name'][$index] ?? '',
+                'type' => $files['type'][$index] ?? '',
+                'tmp_name' => $files['tmp_name'][$index] ?? '',
+                'error' => $files['error'][$index] ?? UPLOAD_ERR_NO_FILE,
+                'size' => $files['size'][$index] ?? 0,
+            ];
+            if ($file['error'] !== UPLOAD_ERR_OK || $file['size'] > 5 * 1024 * 1024) {
+                JsonResponse::send(['message' => 'Cada imagen debe ser válida y no superar los 5 MB.'], 422);
+            }
+            if (!is_uploaded_file((string) $file['tmp_name'])) {
+                JsonResponse::send(['message' => 'No se pudo validar una de las imágenes.'], 422);
+            }
+
+            $payload = uploadGarmentImage(['name' => pathinfo((string) $originalName, PATHINFO_FILENAME), 'category' => $category], (int) $user['id'], $file);
+            validateGarmentPayload($payload);
+            $created[] = $garments->create((int) $user['id'], $payload);
+        }
+
+        JsonResponse::send(['data' => $created], 201);
+    });
+
     $f3->route('GET /api/garments/@id/image', static function () use ($auth, $garments, $f3): void {
         $user = authenticatedUser($auth);
         $garment = $garments->find((int) $user['id'], (int) $f3->get('PARAMS.id'));
@@ -341,14 +373,14 @@ function requestPayload(): array
 
 function validateGarmentPayload(array $payload): void
 {
-    if (trim((string) ($payload['name'] ?? '')) === '' || trim((string) ($payload['category'] ?? '')) === '' || trim((string) ($payload['primary_color'] ?? '')) === '') {
-        JsonResponse::send(['message' => 'Nombre, categoría y color principal son obligatorios.'], 422);
+    if (trim((string) ($payload['name'] ?? '')) === '' || trim((string) ($payload['category'] ?? '')) === '') {
+        JsonResponse::send(['message' => 'El nombre y la categoría son obligatorios.'], 422);
     }
 }
 
-function uploadGarmentImage(array $payload, int $userId): array
+function uploadGarmentImage(array $payload, int $userId, ?array $fileOverride = null): array
 {
-    $uploadedFile = $_FILES['image'] ?? null;
+    $uploadedFile = $fileOverride ?? ($_FILES['image'] ?? null);
     if (!is_array($uploadedFile) || ($uploadedFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
         return $payload;
     }

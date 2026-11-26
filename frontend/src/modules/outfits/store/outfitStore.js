@@ -9,6 +9,7 @@ export const useOutfitStore = defineStore('outfits', () => {
     const suggestions = ref([]);
     const suggestionMessage = ref('');
     const suggestionError = ref('');
+    const suggestionLoading = ref(false);
     const preferences = ref({ preferred_style: '', preferred_season: '' });
 
     const loadOutfits = async (occasion = '', style = '', season = '') => {
@@ -59,6 +60,7 @@ export const useOutfitStore = defineStore('outfits', () => {
     };
 
     const loadSuggestions = async (occasion, style, season) => {
+        suggestionLoading.value = true;
         suggestionError.value = '';
         suggestionMessage.value = '';
         try {
@@ -68,6 +70,8 @@ export const useOutfitStore = defineStore('outfits', () => {
         } catch (requestError) {
             suggestions.value = [];
             suggestionError.value = requestError.message;
+        } finally {
+            suggestionLoading.value = false;
         }
     };
 
@@ -81,5 +85,5 @@ export const useOutfitStore = defineStore('outfits', () => {
         preferences.value = response.data || preferences.value;
     };
 
-    return { outfits, loading, error, suggestions, suggestionMessage, suggestionError, preferences, loadOutfits, createOutfit, updateOutfit, removeOutfit, duplicateOutfit, toggleFavorite, loadSuggestions, loadPreferences, updatePreferences };
+    return { outfits, loading, error, suggestions, suggestionMessage, suggestionError, suggestionLoading, preferences, loadOutfits, createOutfit, updateOutfit, removeOutfit, duplicateOutfit, toggleFavorite, loadSuggestions, loadPreferences, updatePreferences };
 });

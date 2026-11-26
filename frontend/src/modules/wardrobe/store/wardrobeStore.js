@@ -9,6 +9,9 @@ export const useWardrobeStore = defineStore('wardrobe', () => {
     const loading = ref(false);
     const error = ref('');
     const visibleGarments = computed(() => garments.value.filter((garment) => {
+        const search = filters.value.search.trim().toLocaleLowerCase();
+        if (filters.value.category && garment.category !== filters.value.category) return false;
+        if (search && !`${garment.name || ''} ${garment.brand || ''}`.toLocaleLowerCase().includes(search)) return false;
         if (favoriteOnly.value && !garment.is_favorite) return false;
         if (filters.value.color && garment.primary_color !== filters.value.color) return false;
         if (filters.value.season && garment.season !== filters.value.season) return false;
@@ -32,12 +35,10 @@ export const useWardrobeStore = defineStore('wardrobe', () => {
 
     const setCategory = async (category) => {
         filters.value.category = category;
-        await loadGarments();
     };
 
     const setSearch = async (search) => {
         filters.value.search = search;
-        await loadGarments();
     };
 
     const clearFilters = async () => {
@@ -53,6 +54,10 @@ export const useWardrobeStore = defineStore('wardrobe', () => {
         filters.value[name] = value;
     };
 
+    const setCategoryFilter = (category) => {
+        filters.value.category = category;
+    };
+
     const toggleFavorite = async (garment) => {
         const response = await garmentService.toggleFavorite(garment.id);
         const index = garments.value.findIndex((item) => item.id === garment.id);
@@ -66,5 +71,5 @@ export const useWardrobeStore = defineStore('wardrobe', () => {
         garments.value = garments.value.filter((garment) => garment.id !== id);
     };
 
-    return { garments, visibleGarments, filters, favoriteOnly, loading, error, totalGarments, loadGarments, setCategory, setSearch, clearFilters, toggleFavorites, setFilter, toggleFavorite, imageUrl, removeGarment };
+    return { garments, visibleGarments, filters, favoriteOnly, loading, error, totalGarments, loadGarments, setCategory, setSearch, clearFilters, toggleFavorites, setFilter, setCategoryFilter, toggleFavorite, imageUrl, removeGarment };
 });

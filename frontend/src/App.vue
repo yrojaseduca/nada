@@ -45,6 +45,7 @@ const clearGarmentFilters = () => {
     search.value = '';
     wardrobe.clearFilters();
 };
+const setWardrobeFilter = (name, value) => wardrobe.setFilter(name, value);
 onMounted(() => wardrobe.loadGarments());
 onMounted(() => auth.restore());
 watch(() => auth.isAuthenticated, (authenticated) => {
@@ -64,7 +65,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
             <button class="rounded-full bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white shadow-sm" @click="showGarmentForm = true">+ Añadir prenda</button>
         </header>
 
-        <DashboardView v-if="activeSection === 'dashboard'" @go-outfits="activeSection = 'outfits'" />
+        <DashboardView v-if="activeSection === 'dashboard'" @go-outfits="activeSection = 'outfits'" @go-wardrobe="activeSection = 'wardrobe'" />
         <OutfitsView v-else-if="activeSection === 'outfits'" />
         <ColorimetryView v-else-if="activeSection === 'colorimetry'" />
         <main v-else class="mx-auto max-w-6xl px-5 pb-28 sm:px-8">
@@ -86,16 +87,16 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
                 </div>
 
                 <div class="mt-5 flex gap-2 overflow-x-auto pb-2" aria-label="Filtrar por categoría y favoritos">
-                    <button v-for="category in categories" :key="category.value" class="shrink-0 rounded-full border px-4 py-2 text-sm transition" :class="wardrobe.filters.category === category.value ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white' : 'border-[var(--color-border)] bg-white text-[var(--color-primary)]'" @click="wardrobe.setCategory(category.value)">
+                    <button v-for="category in categories" :key="category.value" class="shrink-0 rounded-full border px-4 py-2 text-sm transition" :class="wardrobe.filters.category === category.value ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white' : 'border-[var(--color-border)] bg-white text-[var(--color-primary)]'" @click="wardrobe.setCategoryFilter(category.value)">
                         {{ category.label }}
                     </button>
                     <button class="shrink-0 rounded-full border px-4 py-2 text-sm transition" :class="wardrobe.favoriteOnly ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white' : 'border-[var(--color-border)] bg-white text-[var(--color-primary)]'" @click="wardrobe.toggleFavorites">♥ Favoritas</button>
                     <button class="shrink-0 rounded-full border border-[var(--color-border)] bg-white px-4 py-2 text-sm text-[var(--color-primary)]" :aria-expanded="showWardrobeFilters" @click="showWardrobeFilters = !showWardrobeFilters">Más filtros <span aria-hidden="true">▾</span><span v-if="activeFilterCount" class="ml-1 rounded-full bg-[var(--color-primary)] px-1.5 py-0.5 text-[10px] text-white">{{ activeFilterCount }}</span></button>
                 </div>
                 <div v-if="showWardrobeFilters" class="mt-3 grid gap-3 rounded-2xl bg-white p-4 shadow-sm sm:grid-cols-3">
-                    <div class="rounded-xl border border-[var(--color-border)] p-3 sm:col-span-3"><p class="text-xs font-medium text-[var(--color-text-muted)]">Color</p><div class="mt-2 flex flex-wrap gap-2"><button class="rounded-full border px-3 py-1.5 text-xs" :class="!wardrobe.filters.color ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white' : 'border-[var(--color-border)] text-[var(--color-primary)]'" @click="wardrobe.setFilter('color', '')">Todos</button><button v-for="color in colors" :key="color" class="flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs" :class="wardrobe.filters.color === color ? 'border-[var(--color-primary)] bg-[var(--color-surface-muted)] text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-muted)]'" @click="wardrobe.setFilter('color', color)"><span class="h-3 w-3 rounded-full border border-black/10" :style="{ backgroundColor: colorHex[color] }" aria-hidden="true"></span>{{ color }}</button></div></div>
-                    <select v-model="wardrobe.filters.season" class="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 pr-8 text-sm" aria-label="Filtrar por temporada"><option value="">Todas las temporadas</option><option v-for="season in seasons" :key="season">{{ season }}</option></select>
-                    <select v-model="wardrobe.filters.style" class="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 pr-8 text-sm" aria-label="Filtrar por estilo"><option value="">Todos los estilos</option><option v-for="style in styles" :key="style">{{ style }}</option></select>
+                    <div class="rounded-xl border border-[var(--color-border)] p-3 sm:col-span-3"><p class="text-xs font-medium text-[var(--color-text-muted)]">Color</p><div class="mt-2 flex flex-wrap gap-2"><button class="rounded-full border px-3 py-1.5 text-xs" :class="!wardrobe.filters.color ? 'border-[var(--color-primary)] bg-[var(--color-primary)] text-white' : 'border-[var(--color-border)] text-[var(--color-primary)]'" @click="setWardrobeFilter('color', '')">Todos</button><button v-for="color in colors" :key="color" class="flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-xs" :class="wardrobe.filters.color === color ? 'border-[var(--color-primary)] bg-[var(--color-surface-muted)] text-[var(--color-primary)]' : 'border-[var(--color-border)] text-[var(--color-text-muted)]'" @click="setWardrobeFilter('color', color)"><span class="h-3 w-3 rounded-full border border-black/10" :style="{ backgroundColor: colorHex[color] }" aria-hidden="true"></span>{{ color }}</button></div></div>
+                    <select :value="wardrobe.filters.season" class="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 pr-8 text-sm" aria-label="Filtrar por temporada" @change="setWardrobeFilter('season', $event.target.value)"><option value="">Todas las temporadas</option><option v-for="season in seasons" :key="season">{{ season }}</option></select>
+                    <select :value="wardrobe.filters.style" class="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 pr-8 text-sm" aria-label="Filtrar por estilo" @change="setWardrobeFilter('style', $event.target.value)"><option value="">Todos los estilos</option><option v-for="style in styles" :key="style">{{ style }}</option></select>
                     <button v-if="activeFilterCount" class="text-left text-xs font-medium text-[var(--color-primary)] underline underline-offset-2 sm:col-span-3" @click="clearGarmentFilters">Limpiar todos los filtros</button>
                 </div>
 
@@ -148,7 +149,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <div v-if="showGarmentForm" class="fixed inset-0 z-20 flex items-end justify-center bg-[var(--color-text)]/40 sm:items-center sm:p-6" @click.self="showGarmentForm = false">
             <section class="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 sm:max-w-lg sm:rounded-3xl">
                 <div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-semibold">Añadir prenda</h2><button aria-label="Cerrar" @click="showGarmentForm = false">×</button></div>
-                <GarmentForm @cancel="showGarmentForm = false" @saved="showGarmentForm = false; wardrobe.loadGarments()" />
+                <GarmentForm @cancel="showGarmentForm = false" @saved="wardrobe.loadGarments()" />
             </section>
         </div>
         <div v-if="editingGarment" class="fixed inset-0 z-20 flex items-end justify-center bg-[var(--color-text)]/40 sm:items-center sm:p-6" @click.self="editingGarment = null"><section class="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 sm:max-w-lg sm:rounded-3xl"><div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-semibold">Editar prenda</h2><button @click="editingGarment = null">×</button></div><GarmentForm :garment="editingGarment" @cancel="editingGarment = null" @saved="editingGarment = null; wardrobe.loadGarments()" /></section></div>

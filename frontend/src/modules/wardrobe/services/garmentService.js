@@ -29,6 +29,12 @@ export const garmentService = {
             body: multipart ? data : JSON.stringify(data)
         });
     },
+    createMany(category, images) {
+        const data = new FormData();
+        data.append('category', category);
+        images.forEach((image) => data.append('images[]', image));
+        return apiRequest('/garments/bulk', { method: 'POST', body: data });
+    },
     remove(id) {
         return apiRequest(`/garments/${id}`, { method: 'DELETE' });
     },
