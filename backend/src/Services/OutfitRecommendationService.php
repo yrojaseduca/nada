@@ -86,21 +86,42 @@ final class OutfitRecommendationService
         if ($occasion !== null && in_array((string) $garment['style'], $occasionStyles[$occasion] ?? [], true)) {
             $score += 2;
         }
-        if ($palette !== null && in_array(mb_strtolower(trim((string) $garment['primary_color'])), self::paletteColors($palette), true)) {
-            $score += 5;
+        if ($palette !== null) {
+            $score += self::paletteColorScore((string) $garment['primary_color'], $palette);
         }
 
         return $score;
     }
 
-    private static function paletteColors(string $palette): array
+    private static function paletteColorScore(string $color, string $palette): int
     {
-        return match ($palette) {
-            'warm' => ['rojo', 'marrón', 'marron', 'beige', 'amarillo', 'verde'],
-            'cool' => ['azul', 'gris', 'rosa', 'verde', 'morado', 'blanco'],
-            'neutral' => ['negro', 'blanco', 'gris', 'beige', 'marrón', 'marron'],
-            default => [],
+        $garmentColors = [
+            'negro' => '#282724', 'blanco' => '#ffffff', 'gris' => '#8e857a', 'azul' => '#426a8c',
+            'rojo' => '#b95750', 'verde' => '#668267', 'marrón' => '#8b654d', 'marron' => '#8b654d',
+            'beige' => '#dccbb9', 'rosa' => '#d99ba4', 'amarillo' => '#d7b84b',
         };
+        $palettes = [
+            'warm' => ['#A64E3C', '#D58B55', '#D8B65C', '#6D8054', '#2F625A', '#8C514B'],
+            'cool' => ['#6D7896', '#788DA8', '#658A83', '#8B7189', '#A96878', '#525E78'],
+            'neutral' => ['#8A7867', '#B49B7D', '#879078', '#7E8585', '#A08078', '#655E58'],
+        ];
+        $normalizedColor = mb_strtolower(trim($color));
+        $hex = $garmentColors[$normalizedColor] ?? null;
+        if ($hex === null || !isset($palettes[$palette])) return 0;
+        $rgb = self::hexToRgb($hex);
+        $minimumDistance = min(array_map(static fn (string $recommended): float => self::colorDistance($rgb, self::hexToRgb($recommended)), $palettes[$palette]));
+
+        return $minimumDistance < 45 ? 8 : ($minimumDistance < 75 ? 4 : 0);
+    }
+
+    private static function hexToRgb(string $hex): array
+    {
+        return [hexdec(substr($hex, 1, 2)), hexdec(substr($hex, 3, 2)), hexdec(substr($hex, 5, 2))];
+    }
+
+    private static function colorDistance(array $first, array $second): float
+    {
+        return sqrt(($first[0] - $second[0]) ** 2 + ($first[1] - $second[1]) ** 2 + ($first[2] - $second[2]) ** 2);
     }
 
     private function bestCompatible(array $candidates, array $garment): ?array

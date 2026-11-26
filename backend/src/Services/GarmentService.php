@@ -25,7 +25,7 @@ final class GarmentService
         }
 
         $sql = sprintf(
-            'SELECT id, name, category, subcategory, primary_color, secondary_colors, season, style, brand, notes, image_path, is_favorite, created_at, updated_at FROM garments WHERE %s ORDER BY created_at DESC',
+            'SELECT id, name, category, subcategory, primary_color, suggested_color, secondary_colors, season, style, brand, notes, image_path, is_favorite, created_at, updated_at FROM garments WHERE %s ORDER BY created_at DESC',
             implode(' AND ', $conditions)
         );
         $statement = Connection::create()->prepare($sql);
@@ -46,7 +46,7 @@ final class GarmentService
     {
         $connection = Connection::create();
         $statement = $connection->prepare(
-            'INSERT INTO garments (user_id, name, category, subcategory, primary_color, secondary_colors, season, style, brand, notes, image_path) VALUES (:user_id, :name, :category, :subcategory, :primary_color, :secondary_colors, :season, :style, :brand, :notes, :image_path)'
+            'INSERT INTO garments (user_id, name, category, subcategory, primary_color, suggested_color, secondary_colors, season, style, brand, notes, image_path) VALUES (:user_id, :name, :category, :subcategory, :primary_color, :suggested_color, :secondary_colors, :season, :style, :brand, :notes, :image_path)'
         );
         $statement->execute([
             'user_id' => $userId,
@@ -54,6 +54,7 @@ final class GarmentService
             'category' => $data['category'],
             'subcategory' => $data['subcategory'] ?? null,
             'primary_color' => trim((string) ($data['primary_color'] ?? '')),
+            'suggested_color' => $data['suggested_color'] ?? null,
             'secondary_colors' => isset($data['secondary_colors']) ? json_encode($data['secondary_colors'], JSON_THROW_ON_ERROR) : null,
             'season' => $data['season'] ?? null,
             'style' => $data['style'] ?? null,
@@ -86,13 +87,14 @@ final class GarmentService
 
     public function update(int $userId, int $id, array $data): array
     {
-        $statement = Connection::create()->prepare('UPDATE garments SET name = :name, category = :category, primary_color = :primary_color, season = :season, style = :style, brand = :brand, notes = :notes WHERE id = :id AND user_id = :user_id');
+        $statement = Connection::create()->prepare('UPDATE garments SET name = :name, category = :category, primary_color = :primary_color, suggested_color = CASE WHEN :primary_color_check <> \'\' THEN NULL ELSE suggested_color END, season = :season, style = :style, brand = :brand, notes = :notes WHERE id = :id AND user_id = :user_id');
         $statement->execute([
             'id' => $id,
             'user_id' => $userId,
             'name' => trim((string) $data['name']),
             'category' => trim((string) $data['category']),
             'primary_color' => trim((string) ($data['primary_color'] ?? '')),
+            'primary_color_check' => trim((string) ($data['primary_color'] ?? '')),
             'season' => $data['season'] ?? null,
             'style' => $data['style'] ?? null,
             'brand' => $data['brand'] ?? null,

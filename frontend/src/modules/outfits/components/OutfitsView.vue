@@ -5,12 +5,16 @@ import { useWardrobeStore } from '../../wardrobe/store/wardrobeStore';
 import { avatarService } from '../../auth/services/avatarService';
 import { colorimetryService } from '../../colorimetry/services/colorimetryService';
 
+const props = defineProps({ view: { type: String, default: 'outfits' } });
 const outfits = useOutfitStore();
 const wardrobe = useWardrobeStore();
 const showForm = ref(false);
 const editing = ref(null);
 const selected = ref(null);
 const deleteCandidate = ref(null);
+const renameCandidate = ref(null);
+const renameValue = ref('');
+const renameError = ref('');
 const favoriteOnly = ref(false);
 const category = ref('');
 const filterOccasion = ref('');
@@ -24,6 +28,10 @@ const hasColorimetry = ref(false);
 const message = ref('');
 const avatarAvailable = ref(false);
 const showTryOn = ref(false);
+const showTryOnBuilder = ref(false);
+const tryOnSelection = ref([]);
+const tryOnName = ref('');
+const editingTryOnOutfit = ref(null);
 const tryOnOutfit = ref(null);
 const garmentPositions = ref({});
 const activeDrag = ref(null);
@@ -31,6 +39,7 @@ const selectedTryOnGarmentId = ref(null);
 const avatarZones = ref(null);
 const autoGarmentPositions = ref({});
 const avatarDetectionMessage = ref('');
+const preserveTryOnPositions = ref(false);
 const avatarFrame = ref(null);
 const exportBusy = ref(false);
 const exportError = ref('');
@@ -44,6 +53,8 @@ const categories = [
 const visibleGarments = computed(() => category.value ? wardrobe.garments.filter((item) => item.category === category.value) : wardrobe.garments);
 const selectedGarments = computed(() => wardrobe.garments.filter((item) => form.garment_ids.includes(item.id)));
 const visibleOutfits = computed(() => favoriteOnly.value ? outfits.outfits.filter((item) => item.is_favorite) : outfits.outfits);
+const isTryOnView = computed(() => props.view === 'tryon');
+const savedTryOnOutfits = computed(() => outfits.outfits.filter((item) => item.source === 'tryon' || item.source === 'try-on'));
 
 const reset = () => {
     Object.assign(form, { name: '', occasion: 'diario', style: 'casual', season: '', notes: '', garment_ids: [] });
@@ -77,6 +88,38 @@ const remove = async (outfit) => {
 };
 const requestRemove = (outfit) => {
     deleteCandidate.value = outfit;
+};
+const requestRename = (outfit) => {
+    renameCandidate.value = outfit;
+    renameValue.value = outfit.name;
+    renameError.value = '';
+};
+const confirmRename = async () => {
+    if (!renameCandidate.value) return;
+    const name = renameValue.value.trim();
+    if (!name) {
+        renameError.value = 'Escribe un nombre para la composición.';
+        return;
+    }
+    renameError.value = '';
+    try {
+        const outfit = renameCandidate.value;
+        const positionData = outfit.notes?.startsWith('tryon:') ? outfit.notes : `tryon:${JSON.stringify({})}`;
+        await outfits.updateOutfit(outfit.id, {
+            name,
+            occasion: outfit.occasion || 'diario',
+            style: outfit.style || null,
+            season: outfit.season || null,
+            notes: positionData,
+            source: outfit.source || 'tryon',
+            garment_ids: outfit.garments.map((garment) => garment.id)
+        });
+        renameCandidate.value = null;
+        message.value = 'Composición renombrada.';
+        window.setTimeout(() => { message.value = ''; }, 4000);
+    } catch (error) {
+        renameError.value = error.message || 'No se pudo renombrar la composición.';
+    }
 };
 const confirmRemove = async () => {
     if (!deleteCandidate.value) return;
@@ -128,7 +171,9 @@ const openTryOn = async (outfit) => {
             return;
         }
         tryOnOutfit.value = outfit;
-        garmentPositions.value = Object.fromEntries(outfit.garments.map((garment, index) => [garment.id, defaultGarmentPosition(garment, index)]));
+        preserveTryOnPositions.value = false;
+        const savedPositions = outfit.try_on_positions || {};
+        garmentPositions.value = Object.fromEntries(outfit.garments.map((garment, index) => [garment.id, savedPositions[garment.id] || defaultGarmentPosition(garment, index)]));
         autoGarmentPositions.value = {};
         selectedTryOnGarmentId.value = outfit.garments[0]?.id || null;
         avatarZones.value = null;
@@ -140,6 +185,10 @@ const openTryOn = async (outfit) => {
 };
 const detectAvatarZones = (event) => {
     if (!tryOnOutfit.value || !avatarFrame.value) return;
+    if (preserveTryOnPositions.value) {
+        avatarDetectionMessage.value = 'Se han conservado tus posiciones guardadas. Las prendas nuevas empiezan con una posición aproximada que puedes ajustar.';
+        return;
+    }
     try {
         const image = event.target;
         const canvas = document.createElement('canvas');
@@ -257,6 +306,90 @@ const detectAvatarZones = (event) => {
 const openTryOnFromWardrobe = async (garment) => {
     const outfit = { id: `garment-${garment.id}`, name: `Prueba: ${garment.name}`, garments: [garment] };
     await openTryOn(outfit);
+};
+const openTryOnBuilder = async () => {
+    if (!wardrobe.garments.length) await wardrobe.loadGarments();
+    tryOnSelection.value = [];
+    tryOnName.value = '';
+    showTryOnBuilder.value = true;
+};
+const editTryOnOutfit = async (outfit) => {
+    if (!wardrobe.garments.length) await wardrobe.loadGarments();
+    editingTryOnOutfit.value = { ...outfit, try_on_positions: getSavedTryOnPositions(outfit) };
+    tryOnName.value = outfit.name;
+    tryOnSelection.value = outfit.garments.map((garment) => garment.id);
+    showTryOnBuilder.value = true;
+};
+const toggleTryOnSelection = (garmentId) => {
+    tryOnSelection.value = tryOnSelection.value.includes(garmentId)
+        ? tryOnSelection.value.filter((id) => id !== garmentId)
+        : [...tryOnSelection.value, garmentId];
+};
+const startTryOnSelection = () => {
+    const garments = wardrobe.garments.filter((garment) => tryOnSelection.value.includes(garment.id));
+    if (!garments.length) return;
+    showTryOnBuilder.value = false;
+    if (editingTryOnOutfit.value) {
+        const existing = editingTryOnOutfit.value;
+        preserveTryOnPositions.value = true;
+        tryOnOutfit.value = { ...existing, name: tryOnName.value.trim() || existing.name, garments };
+        const previousPositions = existing.try_on_positions || {};
+        garmentPositions.value = Object.fromEntries(garments.map((garment, index) => [
+            garment.id,
+            previousPositions[garment.id] || defaultGarmentPosition(garment, index)
+        ]));
+        autoGarmentPositions.value = {};
+        selectedTryOnGarmentId.value = garments[0]?.id || null;
+        avatarZones.value = null;
+        avatarDetectionMessage.value = 'Ajusta las prendas añadidas y guarda los cambios cuando termines.';
+        exportError.value = '';
+        showTryOn.value = true;
+        editingTryOnOutfit.value = null;
+        return;
+    }
+    openTryOn({ id: `try-on-${Date.now()}`, name: tryOnName.value.trim() || 'Mi prueba virtual', garments });
+};
+const saveTryOnOutfit = async () => {
+    if (!tryOnOutfit.value?.garments?.length) return;
+    exportError.value = '';
+    try {
+        const data = {
+            name: tryOnOutfit.value.name.trim() || 'Mi prueba virtual',
+            occasion: 'diario',
+            style: null,
+            season: null,
+            notes: `tryon:${JSON.stringify(garmentPositions.value)}`,
+            source: 'tryon',
+            garment_ids: tryOnOutfit.value.garments.map((garment) => garment.id)
+        };
+        let saved;
+        if (tryOnOutfit.value.source === 'tryon' || tryOnOutfit.value.source === 'try-on') {
+            await outfits.updateOutfit(tryOnOutfit.value.id, data);
+            saved = outfits.outfits.find((outfit) => outfit.id === tryOnOutfit.value.id);
+        } else {
+            await outfits.createOutfit(data);
+            saved = outfits.outfits[0];
+        }
+        if (!saved) throw new Error('No se encontró la composición guardada.');
+        saved.try_on_positions = { ...garmentPositions.value };
+        tryOnOutfit.value = saved;
+        message.value = saved.source === 'tryon' ? 'Cambios guardados en la composición.' : 'Look del probador guardado.';
+        window.setTimeout(() => { message.value = ''; }, 4000);
+    } catch (error) {
+        exportError.value = error.message || 'No se pudo guardar el look.';
+    }
+};
+const openSavedTryOn = (outfit) => {
+    openTryOn({ ...outfit, try_on_positions: getSavedTryOnPositions(outfit) });
+};
+const getSavedTryOnPositions = (outfit) => {
+    try {
+        const notes = outfit.notes || '';
+        if (notes.startsWith('tryon:')) return JSON.parse(notes.slice(6));
+    } catch {
+        return {};
+    }
+    return {};
 };
 const defaultGarmentPosition = (garment, index) => {
     const positions = {
@@ -386,11 +519,12 @@ onMounted(async () => {
     suggestionSeason.value = outfits.preferences.preferred_season || suggestionSeason.value;
 });
 
-defineExpose({ openTryOnFromWardrobe });
+defineExpose({ openTryOnFromWardrobe, openTryOnBuilder });
 </script>
 
 <template>
     <main class="mx-auto max-w-6xl px-5 pb-28 sm:px-8">
+        <template v-if="!isTryOnView">
         <section class="rounded-3xl bg-[var(--color-border)] p-6 sm:p-8">
             <p class="text-sm text-[var(--color-primary)]">Tu armario, pero con ideas</p>
             <h2 class="mt-2 text-3xl font-semibold">Mis looks</h2>
@@ -401,7 +535,34 @@ defineExpose({ openTryOnFromWardrobe });
             </div>
         </section>
         <p v-if="message" class="mt-5 rounded-2xl bg-[var(--color-danger-border)] p-4 text-sm text-[var(--color-danger-text)]">{{ message }}</p>
-        <section class="mt-8 rounded-3xl bg-white p-6 shadow-sm">
+        </template>
+        <template v-else>
+            <section class="rounded-3xl bg-[var(--color-border)] p-6 sm:p-8">
+                <p class="text-sm text-[var(--color-primary)]">Tu probador virtual</p>
+                <h2 class="mt-2 text-3xl font-semibold">Prueba tus looks</h2>
+                <p class="mt-2 max-w-xl text-sm leading-6 text-[var(--color-primary)]">Combina prendas de tu armario, ajústalas sobre tu avatar y guarda la composición para volver a ella cuando quieras.</p>
+                <button class="mt-5 rounded-full bg-[var(--color-primary)] px-5 py-3 text-sm text-white" @click="openTryOnBuilder">Crear una prueba</button>
+            </section>
+            <p v-if="message" class="mt-5 rounded-2xl bg-[var(--color-danger-border)] p-4 text-sm text-[var(--color-danger-text)]">{{ message }}</p>
+            <section class="mt-8">
+                <h3 class="text-xl font-semibold">Composiciones guardadas</h3>
+                <p v-if="!savedTryOnOutfits.length" class="mt-4 rounded-3xl bg-white p-8 text-center text-sm text-[var(--color-text-muted)]">Todavía no has guardado pruebas. Crea una y guárdala para retomarla aquí.</p>
+                <div v-else class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <article v-for="outfit in savedTryOnOutfits" :key="outfit.id" class="rounded-3xl bg-white p-4 shadow-sm">
+                        <button class="w-full text-left" @click="openSavedTryOn(outfit)">
+                            <div class="grid grid-cols-3 gap-2"><div v-for="garment in outfit.garments" :key="garment.id" class="flex aspect-square items-center justify-center overflow-hidden rounded-xl bg-[var(--color-border)]"><img v-if="garment.image_path" :src="wardrobe.imageUrl(garment.id)" :alt="garment.name" class="h-full w-full object-cover" /><span v-else>✦</span></div></div>
+                            <h4 class="mt-4 truncate font-semibold">{{ outfit.name }}</h4>
+                            <p class="mt-1 text-xs text-[var(--color-text-subtle)]">{{ outfit.garments.length }} prendas · Pulsa para volver a probar</p>
+                        </button>
+                        <button class="mt-3 min-h-11 w-full rounded-xl border border-[var(--color-primary)] px-3 py-2 text-sm font-medium text-[var(--color-primary)] transition hover:bg-[var(--color-surface-muted)]" @click="editTryOnOutfit(outfit)">Editar prendas</button>
+                        <button class="mt-3 min-h-11 w-full rounded-xl border border-[var(--color-border)] px-3 py-2 text-sm font-medium text-[var(--color-primary)] transition hover:bg-[var(--color-surface-muted)]" @click="requestRename(outfit)">Renombrar composición</button>
+                        <button class="mt-3 min-h-11 w-full rounded-xl border border-red-200 px-3 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50" @click="requestRemove(outfit)">Eliminar composición</button>
+                    </article>
+                </div>
+            </section>
+        </template>
+        <p v-if="message && !isTryOnView" class="mt-5 rounded-2xl bg-[var(--color-danger-border)] p-4 text-sm text-[var(--color-danger-text)]">{{ message }}</p>
+        <section v-if="!isTryOnView" class="mt-8 rounded-3xl bg-white p-6 shadow-sm">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div><p class="text-sm text-[var(--color-neutral-text)]">Estilista inteligente</p><h3 class="mt-1 text-xl font-semibold">Que decida alguien. Aunque sea un algoritmo.</h3></div>
                 <div class="grid gap-2 sm:grid-cols-4">
@@ -433,7 +594,7 @@ defineExpose({ openTryOnFromWardrobe });
                 <button class="mt-4 rounded-xl border border-[var(--color-primary)] px-4 py-2 text-sm text-[var(--color-primary)]" @click="saveSuggestion(suggestion)">Guardar como look</button>
             </div>
         </section>
-        <section class="mt-8">
+        <section v-if="!isTryOnView" class="mt-8">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <h3 class="text-xl font-semibold">Looks guardados</h3>
                 <div class="flex flex-wrap gap-2">
@@ -501,6 +662,21 @@ defineExpose({ openTryOnFromWardrobe });
                 <div class="mt-6 grid gap-3 sm:grid-cols-2"><button class="rounded-xl bg-[var(--color-primary)] px-3 py-3 text-sm font-medium text-white" @click="openTryOn(selected)">Probar con mi avatar</button><button class="rounded-xl border border-[var(--color-border)] px-3 py-3 text-sm" @click="edit(selected)">Editar look</button><button class="rounded-xl border border-[var(--color-border)] px-3 py-3 text-sm" @click="duplicate(selected)">Duplicar look</button><button class="rounded-xl border border-red-200 px-3 py-3 text-sm text-red-700 sm:col-span-2" @click="requestRemove(selected)">Eliminar look</button></div>
             </section>
         </div>
+        <div v-if="showTryOnBuilder" class="fixed inset-0 z-40 flex items-end justify-center bg-[var(--color-text)]/50 p-3 sm:items-center sm:p-6" @click.self="showTryOnBuilder = false">
+            <section class="max-h-[90dvh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-5">
+                <div class="flex items-center justify-between"><div><p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-primary)]">Probador virtual</p><h2 class="mt-1 text-xl font-semibold">{{ editingTryOnOutfit ? 'Edita las prendas' : 'Crea un look para probar' }}</h2></div><button class="min-h-11 min-w-11 rounded-full bg-[var(--color-surface-muted)]" aria-label="Cerrar" @click="showTryOnBuilder = false; editingTryOnOutfit = null">×</button></div>
+                <p class="mt-2 text-sm text-[var(--color-text-muted)]">{{ editingTryOnOutfit ? 'Añade o quita prendas y continúa para revisar cómo quedan en el avatar.' : 'Selecciona varias prendas del armario y colócalas sobre tu avatar.' }}</p>
+                <label class="mt-4 block text-sm font-medium">{{ editingTryOnOutfit ? 'Nombre de la composición' : 'Nombre de la composición' }}<input v-model="tryOnName" maxlength="160" class="mt-2 min-h-11 w-full rounded-xl border border-[var(--color-border)] px-3" placeholder="Por ejemplo, look de oficina" /></label>
+                <p v-if="!wardrobe.garments.length" class="mt-5 rounded-xl bg-[var(--color-surface-muted)] p-4 text-sm">Añade prendas al armario para crear una prueba.</p>
+                <div v-else class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <button v-for="garment in wardrobe.garments" :key="garment.id" class="overflow-hidden rounded-2xl border-2 text-left" :class="tryOnSelection.includes(garment.id) ? 'border-[var(--color-primary)]' : 'border-[var(--color-border)]'" :aria-pressed="tryOnSelection.includes(garment.id)" @click="toggleTryOnSelection(garment.id)">
+                        <div class="flex aspect-square items-center justify-center bg-[var(--color-surface-muted)]"><img v-if="garment.image_path" :src="wardrobe.imageUrl(garment.id)" :alt="garment.name" class="h-full w-full object-cover" /><span v-else class="text-2xl">✦</span></div>
+                        <p class="truncate p-2 text-xs font-medium">{{ garment.name }}</p>
+                    </button>
+                </div>
+                <button class="mt-5 min-h-12 w-full rounded-xl bg-[var(--color-primary)] px-4 py-3 text-sm font-medium text-white disabled:opacity-50" :disabled="!tryOnSelection.length" @click="startTryOnSelection">{{ editingTryOnOutfit ? 'Continuar con ' : 'Probar ' }}{{ tryOnSelection.length }} prendas con mi avatar</button>
+            </section>
+        </div>
         <div v-if="showTryOn && tryOnOutfit" class="fixed inset-0 z-40 flex items-end justify-center bg-[var(--color-text)]/50 sm:items-center sm:p-6" @click.self="showTryOn = false">
             <section class="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 sm:max-w-3xl sm:rounded-3xl sm:p-7">
                 <div class="flex items-start justify-between gap-4"><div><p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-primary)]">Prueba visual</p><h3 class="mt-1 text-xl font-semibold">{{ tryOnOutfit.name }}</h3></div><button aria-label="Cerrar prueba visual" class="rounded-full bg-[var(--color-surface-muted)] px-3 py-1 text-lg" @click="showTryOn = false">×</button></div>
@@ -516,6 +692,7 @@ defineExpose({ openTryOnFromWardrobe });
                     </div>
                     <div class="space-y-3">
                         <p v-if="avatarDetectionMessage" class="rounded-xl bg-[var(--color-surface-muted)] p-3 text-xs leading-5 text-[var(--color-text-muted)]" role="status">{{ avatarDetectionMessage }}</p>
+                        <button class="w-full rounded-xl border border-[var(--color-primary)] px-3 py-3 text-sm font-medium text-[var(--color-primary)] disabled:opacity-50" :disabled="outfits.loading" @click="saveTryOnOutfit">{{ outfits.loading ? 'Guardando…' : tryOnOutfit.source === 'tryon' || tryOnOutfit.source === 'try-on' ? 'Guardar cambios' : 'Guardar look para volver a probar' }}</button>
                         <button class="w-full rounded-xl bg-[var(--color-primary)] px-3 py-3 text-sm font-medium text-white disabled:opacity-50" :disabled="exportBusy" @click="saveTryOnImage">{{ exportBusy ? 'Preparando imagen…' : 'Guardar composición PNG' }}</button>
                         <p v-if="exportError" role="alert" class="rounded-lg bg-[var(--color-danger-surface)] p-2 text-xs text-[var(--color-danger-text)]">{{ exportError }}</p>
                         <article v-for="garment in tryOnOutfit.garments" :key="garment.id" class="rounded-xl border p-3" :class="selectedTryOnGarmentId === garment.id ? 'border-[var(--color-primary)] bg-[var(--color-surface-muted)]' : 'border-[var(--color-border)]'">
@@ -539,6 +716,17 @@ defineExpose({ openTryOnFromWardrobe });
                 <div class="mt-6 grid grid-cols-2 gap-3">
                     <button class="rounded-xl border border-[var(--color-border)] px-4 py-3 text-sm font-medium" @click="deleteCandidate = null">Cancelar</button>
                     <button class="rounded-xl bg-red-700 px-4 py-3 text-sm font-medium text-white" @click="confirmRemove">Eliminar</button>
+                </div>
+            </section>
+        </div>
+        <div v-if="renameCandidate" class="fixed inset-0 z-40 flex items-center justify-center bg-[var(--color-text)]/40 p-5" @click.self="renameCandidate = null">
+            <section class="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
+                <h3 class="text-lg font-semibold">Renombrar composición</h3>
+                <label class="mt-4 block text-sm font-medium">Nombre<input v-model="renameValue" maxlength="160" autofocus class="mt-2 min-h-11 w-full rounded-xl border border-[var(--color-border)] px-3" @keydown.enter="confirmRename" /></label>
+                <p v-if="renameError" class="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{{ renameError }}</p>
+                <div class="mt-6 grid grid-cols-2 gap-3">
+                    <button class="rounded-xl border border-[var(--color-border)] px-4 py-3 text-sm font-medium" @click="renameCandidate = null">Cancelar</button>
+                    <button class="rounded-xl bg-[var(--color-primary)] px-4 py-3 text-sm font-medium text-white disabled:opacity-50" :disabled="outfits.loading" @click="confirmRename">{{ outfits.loading ? 'Guardando…' : 'Guardar nombre' }}</button>
                 </div>
             </section>
         </div>

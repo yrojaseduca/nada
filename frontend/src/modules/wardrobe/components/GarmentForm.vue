@@ -283,6 +283,7 @@ const toggleWrinkleSmoothing = () => {
             <div class="flex flex-col items-center gap-2"><input type="checkbox" :checked="selectedBulkIds.includes(garment.id)" :aria-label="`Seleccionar ${bulkReviewForms[garment.id].name}`" class="h-4 w-4 accent-[var(--color-primary)]" @change="toggleBulkSelection(garment.id)" /><img :src="wardrobeImageUrl(garment.id)" :alt="bulkReviewForms[garment.id].name" class="h-20 w-20 rounded-xl bg-[var(--color-surface-muted)] object-cover" /></div>
             <div class="min-w-0 space-y-2">
                 <input v-model="bulkReviewForms[garment.id].name" :aria-label="`Nombre para ${garment.name}`" class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm" placeholder="Nombre de la prenda" />
+                <button v-if="!bulkReviewForms[garment.id].primary_color && garment.suggested_color" type="button" class="text-left text-xs text-[var(--color-primary)] underline" @click="bulkReviewForms[garment.id].primary_color = garment.suggested_color">Propuesta de color: {{ garment.suggested_color }} · Usar</button>
                 <div class="grid grid-cols-2 gap-2">
                     <select v-model="bulkReviewForms[garment.id].primary_color" :aria-label="`Color para ${garment.name}`" class="min-w-0 rounded-lg border border-[var(--color-border)] bg-white px-2 py-2 text-xs"><option value="">Color</option><option v-for="color in colors" :key="color">{{ color }}</option></select>
                     <select v-model="bulkReviewForms[garment.id].season" :aria-label="`Temporada para ${garment.name}`" class="min-w-0 rounded-lg border border-[var(--color-border)] bg-white px-2 py-2 text-xs"><option value="">Temporada</option><option v-for="season in seasons" :key="season">{{ season }}</option></select>
@@ -362,6 +363,10 @@ const toggleWrinkleSmoothing = () => {
                     <option v-for="color in colors" :key="color">{{ color }}</option>
                 </select>
             </div>
+        </div>
+        <div v-if="props.garment?.suggested_color && !form.primary_color" class="rounded-xl bg-[var(--color-surface-muted)] p-3 text-sm">
+            <p>Propuesta de color detectada: <strong>{{ props.garment.suggested_color }}</strong></p>
+            <button type="button" class="mt-2 rounded-full border border-[var(--color-primary)] px-3 py-1.5 text-xs font-medium text-[var(--color-primary)]" @click="form.primary_color = props.garment.suggested_color">Usar este color</button>
         </div>
         <div class="grid grid-cols-2 gap-3">
             <select v-model="form.season" aria-label="Temporada (opcional)" class="rounded-xl border border-[var(--color-border)] bg-white px-3 py-3 pr-8">

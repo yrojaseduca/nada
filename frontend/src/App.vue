@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useWardrobeStore } from './modules/wardrobe/store/wardrobeStore';
 import GarmentForm from './modules/wardrobe/components/GarmentForm.vue';
 import LoginView from './modules/auth/components/LoginView.vue';
@@ -54,6 +54,12 @@ const tryOnSelectedGarment = () => {
     activeSection.value = 'outfits';
     window.setTimeout(() => outfitsView.value?.openTryOnFromWardrobe(garment), 0);
 };
+const openTryOnSection = async () => {
+    showProfile.value = false;
+    activeSection.value = 'tryon';
+    await nextTick();
+    outfitsView.value?.openTryOnBuilder();
+};
 onMounted(() => wardrobe.loadGarments());
 onMounted(() => auth.restore());
 watch(() => auth.isAuthenticated, (authenticated) => {
@@ -74,7 +80,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         </header>
 
         <DashboardView v-if="activeSection === 'dashboard'" @go-outfits="activeSection = 'outfits'" @go-wardrobe="activeSection = 'wardrobe'" />
-        <OutfitsView v-else-if="activeSection === 'outfits'" ref="outfitsView" />
+        <OutfitsView v-else-if="activeSection === 'outfits' || activeSection === 'tryon'" ref="outfitsView" :view="activeSection" />
         <ColorimetryView v-else-if="activeSection === 'colorimetry'" />
         <main v-else class="mx-auto max-w-6xl px-5 pb-28 sm:px-8">
             <section class="rounded-3xl bg-[var(--color-border)] p-6 sm:p-8">
@@ -147,7 +153,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
             <section class="w-full rounded-t-3xl bg-white p-6 sm:max-w-md sm:rounded-3xl">
                 <div class="flex items-center justify-between"><h2 class="text-xl font-semibold">{{ selectedGarment.name }}</h2><button aria-label="Cerrar" @click="selectedGarment = null">×</button></div>
                 <img v-if="selectedGarment.image_path" :src="wardrobe.imageUrl(selectedGarment.id)" :alt="selectedGarment.name" class="mt-5 aspect-[4/3] w-full rounded-2xl object-cover" />
-                <dl class="mt-5 grid grid-cols-2 gap-4 text-sm"><div><dt class="text-[var(--color-text-subtle)]">Categoría</dt><dd class="mt-1 font-medium">{{ selectedGarment.category }}</dd></div><div><dt class="text-[var(--color-text-subtle)]">Color</dt><dd class="mt-1 font-medium">{{ selectedGarment.primary_color }}</dd></div><div><dt class="text-[var(--color-text-subtle)]">Estilo</dt><dd class="mt-1 font-medium">{{ selectedGarment.style || 'Sin definir' }}</dd></div><div><dt class="text-[var(--color-text-subtle)]">Marca</dt><dd class="mt-1 font-medium">{{ selectedGarment.brand || 'Sin marca' }}</dd></div></dl>
+                <dl class="mt-5 grid grid-cols-2 gap-4 text-sm"><div><dt class="text-[var(--color-text-subtle)]">Categoría</dt><dd class="mt-1 font-medium">{{ selectedGarment.category }}</dd></div><div><dt class="text-[var(--color-text-subtle)]">Color</dt><dd class="mt-1 font-medium">{{ selectedGarment.primary_color || 'Sin confirmar' }}</dd><dd v-if="!selectedGarment.primary_color && selectedGarment.suggested_color" class="mt-1 text-xs text-[var(--color-text-subtle)]">Propuesta: {{ selectedGarment.suggested_color }}</dd></div><div><dt class="text-[var(--color-text-subtle)]">Estilo</dt><dd class="mt-1 font-medium">{{ selectedGarment.style || 'Sin definir' }}</dd></div><div><dt class="text-[var(--color-text-subtle)]">Marca</dt><dd class="mt-1 font-medium">{{ selectedGarment.brand || 'Sin marca' }}</dd></div></dl>
                 <button class="mt-5 w-full rounded-2xl bg-[var(--color-primary)] px-4 py-3 text-sm font-medium text-white" @click="tryOnSelectedGarment">Probar con mi avatar</button>
                 <button class="mt-3 w-full rounded-2xl border border-[var(--color-border)] px-4 py-3 text-sm font-medium" @click="editingGarment = selectedGarment; selectedGarment = null">Editar prenda</button><button class="mt-3 w-full rounded-2xl border border-red-200 px-4 py-3 text-sm font-medium text-red-700" @click="wardrobe.removeGarment(selectedGarment.id); selectedGarment = null">Eliminar prenda</button>
             </section>
@@ -164,7 +170,7 @@ onBeforeUnmount(() => window.clearTimeout(searchTimer));
         <div v-if="editingGarment" class="fixed inset-0 z-20 flex items-end justify-center bg-[var(--color-text)]/40 sm:items-center sm:p-6" @click.self="editingGarment = null"><section class="max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-white p-6 sm:max-w-lg sm:rounded-3xl"><div class="mb-5 flex items-center justify-between"><h2 class="text-xl font-semibold">Editar prenda</h2><button @click="editingGarment = null">×</button></div><GarmentForm :garment="editingGarment" @cancel="editingGarment = null" @saved="editingGarment = null; wardrobe.loadGarments()" /></section></div>
 
         <nav class="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--color-border)] bg-white/95 px-5 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur sm:hidden" aria-label="Navegación principal">
-            <div class="mx-auto flex max-w-md items-center gap-1 text-[13px] text-[var(--color-text-subtle)]"><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-1 py-2 transition active:bg-[var(--color-surface-muted)]" :class="activeSection === 'dashboard' ? 'font-semibold text-[var(--color-primary)]' : ''" @click="showProfile = false; activeSection = 'dashboard'">⌂ Inicio</button><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-1 py-2 transition active:bg-[var(--color-surface-muted)]" :class="activeSection === 'wardrobe' ? 'font-semibold text-[var(--color-primary)]' : ''" @click="showProfile = false; activeSection = 'wardrobe'">♧ Armario</button><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-1 py-2 transition active:bg-[var(--color-surface-muted)]" :class="activeSection === 'outfits' ? 'font-semibold text-[var(--color-primary)]' : ''" @click="showProfile = false; activeSection = 'outfits'">✦ Looks</button><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-1 py-2 transition active:bg-[var(--color-surface-muted)]" @click="showProfile = true">⚙ Perfil</button><button v-if="auth.user?.is_superadmin" class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-1 py-2 transition active:bg-[var(--color-surface-muted)]" @click="showProfile = false; showUserManagement = true">⚙ Admin</button></div>
+            <div class="mx-auto flex max-w-md items-center gap-0.5 text-[11px] text-[var(--color-text-subtle)]"><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-0.5 py-2 transition active:bg-[var(--color-surface-muted)]" :class="activeSection === 'dashboard' ? 'font-semibold text-[var(--color-primary)]' : ''" @click="showProfile = false; activeSection = 'dashboard'">⌂ Inicio</button><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-0.5 py-2 transition active:bg-[var(--color-surface-muted)]" :class="activeSection === 'wardrobe' ? 'font-semibold text-[var(--color-primary)]' : ''" @click="showProfile = false; activeSection = 'wardrobe'">♧ Armario</button><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-0.5 py-2 transition active:bg-[var(--color-surface-muted)]" :class="activeSection === 'outfits' ? 'font-semibold text-[var(--color-primary)]' : ''" @click="showProfile = false; activeSection = 'outfits'">✦ Looks</button><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-0.5 py-2 transition active:bg-[var(--color-surface-muted)]" :class="activeSection === 'tryon' ? 'font-semibold text-[var(--color-primary)] bg-[var(--color-surface-muted)]' : ''" @click="openTryOnSection">♙ Probar</button><button class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-0.5 py-2 transition active:bg-[var(--color-surface-muted)]" @click="showProfile = true">⚙ Perfil</button><button v-if="auth.user?.is_superadmin" class="flex min-h-11 flex-1 items-center justify-center rounded-xl px-0.5 py-2 transition active:bg-[var(--color-surface-muted)]" @click="showProfile = false; showUserManagement = true">⚙ Admin</button></div>
         </nav>
     </div>
 </template>
