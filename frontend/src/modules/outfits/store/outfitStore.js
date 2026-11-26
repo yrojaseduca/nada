@@ -59,12 +59,12 @@ export const useOutfitStore = defineStore('outfits', () => {
         if (index !== -1) outfits.value[index] = response.data;
     };
 
-    const loadSuggestions = async (occasion, style, season) => {
+    const loadSuggestions = async (occasion, style, season, useColorimetry = false) => {
         suggestionLoading.value = true;
         suggestionError.value = '';
         suggestionMessage.value = '';
         try {
-            const response = await outfitService.suggestions(occasion, style, season);
+            const response = await outfitService.suggestions(occasion, style, season, useColorimetry);
             suggestions.value = response.data || [];
             suggestionMessage.value = response.message || '';
         } catch (requestError) {

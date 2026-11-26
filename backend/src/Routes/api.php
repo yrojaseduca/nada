@@ -236,7 +236,7 @@ return static function (Base $f3): void {
         JsonResponse::send(['data' => $preferences->update((int) $user['id'], $payload['preferred_style'] ?? null, $payload['preferred_season'] ?? null)]);
     });
 
-    $f3->route('GET /api/outfits/suggestions', static function () use ($auth, $recommendations, $preferences): void {
+    $f3->route('GET /api/outfits/suggestions', static function () use ($auth, $recommendations, $preferences, $colorimetry): void {
         $user = authenticatedUser($auth);
         $style = $_GET['style'] ?? null;
         $season = $_GET['season'] ?? null;
@@ -245,7 +245,14 @@ return static function (Base $f3): void {
             $style = $style ?: ($saved['preferred_style'] ?? null);
             $season = $season ?: ($saved['preferred_season'] ?? null);
         }
-        JsonResponse::send($recommendations->suggest((int) $user['id'], $_GET['occasion'] ?? null, $style, $season));
+        $palette = null;
+        if (($_GET['use_colorimetry'] ?? '0') === '1') {
+            $analysis = $colorimetry->get((int) $user['id']);
+            if (is_array($analysis) && is_array($analysis['result'])) {
+                $palette = (string) ($analysis['result']['palette'] ?? '');
+            }
+        }
+        JsonResponse::send($recommendations->suggest((int) $user['id'], $_GET['occasion'] ?? null, $style, $season, $palette));
     });
 
     $f3->route('POST /api/outfits', static function () use ($auth, $outfits): void {

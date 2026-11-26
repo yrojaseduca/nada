@@ -8,7 +8,7 @@ use App\Database\Connection;
 
 final class OutfitRecommendationService
 {
-    public function suggest(int $userId, ?string $occasion = null, ?string $style = null, ?string $season = null): array
+    public function suggest(int $userId, ?string $occasion = null, ?string $style = null, ?string $season = null, ?string $palette = null): array
     {
         $statement = Connection::create()->prepare('SELECT id, name, category, primary_color, style, season, image_path, is_favorite FROM garments WHERE user_id = :user_id ORDER BY is_favorite DESC, created_at DESC');
         $statement->execute(['user_id' => $userId]);
@@ -16,7 +16,7 @@ final class OutfitRecommendationService
 
         $groups = [];
         foreach ($garments as $garment) {
-            $garment['_score'] = $this->garmentScore($garment, $occasion, $style, $season);
+            $garment['_score'] = $this->garmentScore($garment, $occasion, $style, $season, $palette);
             $groups[$garment['category']][] = $garment;
         }
         foreach ($groups as &$group) {
@@ -66,10 +66,14 @@ final class OutfitRecommendationService
             $explanation .= ' para ' . $season;
         }
 
+        if ($palette !== null) {
+            $explanation .= ' y prioriza los colores de tu paleta de colorimetría';
+        }
+
         return ['data' => [['garments' => $selected, 'alternatives' => $alternatives, 'explanation' => $description, 'reason' => $explanation . '.']]];
     }
 
-    private function garmentScore(array $garment, ?string $occasion, ?string $style, ?string $season): int
+    private function garmentScore(array $garment, ?string $occasion, ?string $style, ?string $season, ?string $palette): int
     {
         $score = (int) $garment['is_favorite'];
         if ($style !== null && $style !== '' && strcasecmp((string) $garment['style'], $style) === 0) {
@@ -82,8 +86,21 @@ final class OutfitRecommendationService
         if ($occasion !== null && in_array((string) $garment['style'], $occasionStyles[$occasion] ?? [], true)) {
             $score += 2;
         }
+        if ($palette !== null && in_array(mb_strtolower(trim((string) $garment['primary_color'])), self::paletteColors($palette), true)) {
+            $score += 5;
+        }
 
         return $score;
+    }
+
+    private static function paletteColors(string $palette): array
+    {
+        return match ($palette) {
+            'warm' => ['rojo', 'marrón', 'marron', 'beige', 'amarillo', 'verde'],
+            'cool' => ['azul', 'gris', 'rosa', 'verde', 'morado', 'blanco'],
+            'neutral' => ['negro', 'blanco', 'gris', 'beige', 'marrón', 'marron'],
+            default => [],
+        };
     }
 
     private function bestCompatible(array $candidates, array $garment): ?array

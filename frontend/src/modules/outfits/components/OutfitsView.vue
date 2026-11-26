@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useOutfitStore } from '../store/outfitStore';
 import { useWardrobeStore } from '../../wardrobe/store/wardrobeStore';
 import { avatarService } from '../../auth/services/avatarService';
+import { colorimetryService } from '../../colorimetry/services/colorimetryService';
 
 const outfits = useOutfitStore();
 const wardrobe = useWardrobeStore();
@@ -18,6 +19,8 @@ const filterSeason = ref('');
 const suggestionOccasion = ref('diario');
 const suggestionStyle = ref('casual');
 const suggestionSeason = ref('');
+const useColorimetry = ref(false);
+const hasColorimetry = ref(false);
 const message = ref('');
 const avatarAvailable = ref(false);
 const showTryOn = ref(false);
@@ -87,7 +90,7 @@ const duplicate = async (outfit) => {
     window.setTimeout(() => { message.value = ''; }, 4000);
 };
 const suggest = async () => {
-    await outfits.loadSuggestions(suggestionOccasion.value, suggestionStyle.value, suggestionSeason.value);
+    await outfits.loadSuggestions(suggestionOccasion.value, suggestionStyle.value, suggestionSeason.value, useColorimetry.value && hasColorimetry.value);
 };
 const saveSuggestion = async (suggestion) => {
     try {
@@ -374,6 +377,11 @@ onMounted(async () => {
     outfits.loadOutfits();
     if (!wardrobe.garments.length) wardrobe.loadGarments();
     await outfits.loadPreferences();
+    try {
+        hasColorimetry.value = Boolean((await colorimetryService.get()).data?.result?.palette);
+    } catch {
+        hasColorimetry.value = false;
+    }
     suggestionStyle.value = outfits.preferences.preferred_style || suggestionStyle.value;
     suggestionSeason.value = outfits.preferences.preferred_season || suggestionSeason.value;
 });
@@ -402,6 +410,7 @@ defineExpose({ openTryOnFromWardrobe });
                     <select v-model="suggestionSeason" class="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 pr-8 text-sm"><option value="">Cualquier temporada</option><option>Primavera</option><option>Verano</option><option>Otoño</option><option>Invierno</option></select>
                     <button class="rounded-xl bg-[var(--color-primary)] px-4 py-2 text-sm text-white" @click="suggest">Sugerirme un look</button>
                     <button class="rounded-xl border border-[var(--color-border)] px-4 py-2 text-xs text-[var(--color-primary)]" @click="savePreferences">Guardar preferencias</button>
+                    <label class="flex items-center gap-2 rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 text-xs sm:col-span-4" :class="hasColorimetry ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-subtle)]'"><input v-model="useColorimetry" type="checkbox" class="accent-[var(--color-primary)]" :disabled="!hasColorimetry" />Priorizar colores de mi colorimetría <span v-if="!hasColorimetry">(configúrala en Perfil)</span></label>
                 </div>
             </div>
             <p v-if="outfits.suggestionMessage" class="mt-4 text-sm text-[var(--color-text-subtle)]">{{ outfits.suggestionMessage }}</p>

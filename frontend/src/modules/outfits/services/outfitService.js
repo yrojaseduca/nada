@@ -13,7 +13,7 @@ export const outfitService = {
     remove: (id) => request(`/outfits/${id}`, { method: 'DELETE' }),
     toggleFavorite: (id) => request(`/outfits/${id}/favorite`, { method: 'POST' })
     ,
-    suggestions: (occasion, style, season) => request(`/outfits/suggestions?occasion=${encodeURIComponent(occasion || '')}&style=${encodeURIComponent(style || '')}&season=${encodeURIComponent(season || '')}`),
+    suggestions: (occasion, style, season, useColorimetry = false) => request(`/outfits/suggestions?occasion=${encodeURIComponent(occasion || '')}&style=${encodeURIComponent(style || '')}&season=${encodeURIComponent(season || '')}&use_colorimetry=${useColorimetry ? '1' : '0'}`),
     preferences: () => request('/preferences'),
     updatePreferences: (data) => request('/preferences', { method: 'PATCH', body: JSON.stringify(data) })
 };
