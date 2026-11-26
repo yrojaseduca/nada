@@ -24,6 +24,10 @@ const showTryOn = ref(false);
 const tryOnOutfit = ref(null);
 const garmentPositions = ref({});
 const activeDrag = ref(null);
+const selectedTryOnGarmentId = ref(null);
+const avatarZones = ref(null);
+const autoGarmentPositions = ref({});
+const avatarDetectionMessage = ref('');
 const avatarFrame = ref(null);
 const exportBusy = ref(false);
 const exportError = ref('');
@@ -122,10 +126,134 @@ const openTryOn = async (outfit) => {
         }
         tryOnOutfit.value = outfit;
         garmentPositions.value = Object.fromEntries(outfit.garments.map((garment, index) => [garment.id, defaultGarmentPosition(garment, index)]));
+        autoGarmentPositions.value = {};
+        selectedTryOnGarmentId.value = outfit.garments[0]?.id || null;
+        avatarZones.value = null;
+        avatarDetectionMessage.value = 'Ajustando posiciones iniciales al encuadre…';
         showTryOn.value = true;
     } catch (error) {
         message.value = error.message;
     }
+};
+const detectAvatarZones = (event) => {
+    if (!tryOnOutfit.value || !avatarFrame.value) return;
+    try {
+        const image = event.target;
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 240 / Math.max(image.naturalWidth, image.naturalHeight));
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) return;
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        const cornerIndices = [0, canvas.width - 1, (canvas.height - 1) * canvas.width, canvas.height * canvas.width - 1];
+        const background = [0, 0, 0];
+        cornerIndices.forEach((pixel) => {
+            background[0] += data[pixel * 4];
+            background[1] += data[pixel * 4 + 1];
+            background[2] += data[pixel * 4 + 2];
+        });
+        const backgroundColor = background.map((channel) => channel / cornerIndices.length);
+        let minX = canvas.width;
+        let maxX = 0;
+        let minY = canvas.height;
+        let maxY = 0;
+        let count = 0;
+        const rowBounds = Array.from({ length: canvas.height }, () => ({ min: canvas.width, max: -1, count: 0 }));
+        for (let pixel = 0; pixel < canvas.width * canvas.height; pixel += 1) {
+            const offset = pixel * 4;
+            const distance = Math.sqrt(((data[offset] - backgroundColor[0]) ** 2) + ((data[offset + 1] - backgroundColor[1]) ** 2) + ((data[offset + 2] - backgroundColor[2]) ** 2));
+            if (distance < 52) continue;
+            const x = pixel % canvas.width;
+            const y = Math.floor(pixel / canvas.width);
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+            count += 1;
+            rowBounds[y].min = Math.min(rowBounds[y].min, x);
+            rowBounds[y].max = Math.max(rowBounds[y].max, x);
+            rowBounds[y].count += 1;
+        }
+        if (count < canvas.width * canvas.height * 0.04 || maxY - minY < canvas.height * 0.45) {
+            avatarDetectionMessage.value = 'No pude distinguir bien la silueta. Uso posiciones aproximadas; puedes ajustarlas manualmente.';
+            return;
+        }
+        const bounds = avatarFrame.value.getBoundingClientRect();
+        const imageScale = Math.min(bounds.width / image.naturalWidth, bounds.height / image.naturalHeight);
+        const imageLeft = (bounds.width - image.naturalWidth * imageScale) / 2;
+        const imageTop = (bounds.height - image.naturalHeight * imageScale) / 2;
+        const originalScale = 1 / scale;
+        const silhouetteZoneAt = (fraction) => {
+            const targetY = Math.max(minY, Math.min(maxY, Math.round(minY + (maxY - minY) * fraction)));
+            const windowRows = rowBounds.slice(Math.max(minY, targetY - 2), Math.min(maxY + 1, targetY + 3))
+                .filter((row) => row.count >= 2)
+                .sort((first, second) => (first.max - first.min) - (second.max - second.min));
+            if (!windowRows.length) return { center: (minX + maxX) / 2, width: maxX - minX + 1 };
+            const row = windowRows[Math.floor(windowRows.length / 2)];
+            return { center: (row.min + row.max) / 2, width: row.max - row.min + 1 };
+        };
+        const left = imageLeft + minX * originalScale * imageScale;
+        const right = imageLeft + maxX * originalScale * imageScale;
+        const top = imageTop + minY * originalScale * imageScale;
+        const bottom = imageTop + maxY * originalScale * imageScale;
+        const toPercentX = (value) => value / bounds.width * 100;
+        const toPercentY = (value) => value / bounds.height * 100;
+        const center = (left + right) / 2;
+        const height = bottom - top;
+        const shouldersProfile = silhouetteZoneAt(0.22);
+        const torsoProfile = silhouetteZoneAt(0.34);
+        const hipsProfile = silhouetteZoneAt(0.59);
+        const toFrameX = (sourceX) => imageLeft + sourceX * originalScale * imageScale;
+        const profileWidth = (profile) => profile.width * originalScale * imageScale;
+        avatarZones.value = {
+            head: { x: center, y: top + height * 0.07 },
+            shoulders: { x: toFrameX(shouldersProfile.center), y: top + height * 0.22 },
+            torso: { x: toFrameX(torsoProfile.center), y: top + height * 0.34 },
+            waist: { x: center, y: top + height * 0.52 },
+            hips: { x: toFrameX(hipsProfile.center), y: top + height * 0.59 },
+            legs: { x: center, y: top + height * 0.75 },
+            feet: { x: center, y: bottom - height * 0.025 },
+            width: right - left,
+            torsoWidth: profileWidth(torsoProfile),
+            hipWidth: profileWidth(hipsProfile),
+            shoulderWidth: profileWidth(shouldersProfile),
+            height,
+            toPercentX,
+            toPercentY
+        };
+        tryOnOutfit.value.garments.forEach((garment) => {
+            const zone = avatarZones.value;
+            const anchor = garment.category === 'accessories' ? zone.head
+                : garment.category === 'shoes' ? zone.feet
+                    : garment.category === 'bottom' ? zone.hips
+                        : zone.shoulders;
+            const widthRatio = garment.category === 'outerwear' ? 0.78 : garment.category === 'dress' ? 0.72 : garment.category === 'bottom' ? 0.66 : garment.category === 'shoes' ? 0.34 : garment.category === 'accessories' ? 0.30 : 0.64;
+            const widthAtZone = garment.category === 'bottom' ? zone.hipWidth
+                : garment.category === 'outerwear' ? zone.shoulderWidth
+                    : garment.category === 'top' ? zone.torsoWidth
+                        : zone.width;
+            const position = garmentPositions.value[garment.id];
+            position.x = Math.max(0, Math.min(90, zone.toPercentX(anchor.x) - position.width / 2));
+            const topOffset = garment.category === 'accessories' ? zone.height * 0.025
+                : garment.category === 'top' ? zone.height * 0.07
+                    : garment.category === 'outerwear' ? zone.height * 0.075
+                        : garment.category === 'dress' ? zone.height * 0.045
+                            : garment.category === 'bottom' ? zone.height * 0.025
+                                : zone.height * 0.015;
+            position.y = Math.max(0, Math.min(94, zone.toPercentY(anchor.y - topOffset)));
+            position.width = Math.max(14, Math.min(70, widthAtZone / bounds.width * 100 * widthRatio));
+        });
+        autoGarmentPositions.value = Object.fromEntries(Object.entries(garmentPositions.value).map(([id, position]) => [id, { ...position }]));
+        avatarDetectionMessage.value = 'Posiciones iniciales estimadas desde la silueta. Puedes mover y ajustar cada prenda.';
+    } catch {
+        avatarDetectionMessage.value = 'No pude analizar la silueta. Uso posiciones aproximadas; puedes ajustarlas manualmente.';
+    }
+};
+const openTryOnFromWardrobe = async (garment) => {
+    const outfit = { id: `garment-${garment.id}`, name: `Prueba: ${garment.name}`, garments: [garment] };
+    await openTryOn(outfit);
 };
 const defaultGarmentPosition = (garment, index) => {
     const positions = {
@@ -145,6 +273,7 @@ const defaultGarmentPosition = (garment, index) => {
 const startGarmentDrag = (event, garment) => {
     if (!avatarFrame.value) return;
     event.preventDefault();
+    selectedTryOnGarmentId.value = garment.id;
     event.currentTarget.setPointerCapture(event.pointerId);
     activeDrag.value = { id: garment.id, startX: event.clientX, startY: event.clientY, origin: { ...garmentPositions.value[garment.id] } };
 };
@@ -158,6 +287,19 @@ const moveGarment = (event) => {
 const stopGarmentDrag = () => { activeDrag.value = null; };
 const resizeGarment = (garment, event) => {
     garmentPositions.value[garment.id].width = Number(event.target.value);
+};
+const nudgeSelectedGarment = (axis, amount) => {
+    const position = garmentPositions.value[selectedTryOnGarmentId.value];
+    if (!position) return;
+    const key = axis === 'x' ? 'x' : 'y';
+    const limit = key === 'x' ? 90 : 94;
+    position[key] = Math.min(limit, Math.max(0, position[key] + amount));
+};
+const resetTryOnPositions = () => {
+    garmentPositions.value = Object.fromEntries(tryOnOutfit.value.garments.map((garment, index) => [
+        garment.id,
+        autoGarmentPositions.value[garment.id] || defaultGarmentPosition(garment, index)
+    ]));
 };
 const saveTryOnImage = async () => {
     if (!avatarFrame.value || !tryOnOutfit.value) return;
@@ -235,6 +377,8 @@ onMounted(async () => {
     suggestionStyle.value = outfits.preferences.preferred_style || suggestionStyle.value;
     suggestionSeason.value = outfits.preferences.preferred_season || suggestionSeason.value;
 });
+
+defineExpose({ openTryOnFromWardrobe });
 </script>
 
 <template>
@@ -351,24 +495,30 @@ onMounted(async () => {
         <div v-if="showTryOn && tryOnOutfit" class="fixed inset-0 z-40 flex items-end justify-center bg-[var(--color-text)]/50 sm:items-center sm:p-6" @click.self="showTryOn = false">
             <section class="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl bg-white p-5 sm:max-w-3xl sm:rounded-3xl sm:p-7">
                 <div class="flex items-start justify-between gap-4"><div><p class="text-xs font-semibold uppercase tracking-wider text-[var(--color-primary)]">Prueba visual</p><h3 class="mt-1 text-xl font-semibold">{{ tryOnOutfit.name }}</h3></div><button aria-label="Cerrar prueba visual" class="rounded-full bg-[var(--color-surface-muted)] px-3 py-1 text-lg" @click="showTryOn = false">×</button></div>
-                <p class="mt-2 text-sm text-[var(--color-text-muted)]">Arrastra cada prenda sobre tu foto y ajusta su tamaño. La colocación es manual y aproximada.</p>
+                <p class="mt-2 text-sm text-[var(--color-text-muted)]">Selecciona una prenda y muévela con los controles o arrástrala sobre tu foto. La colocación es manual y aproximada.</p>
                 <div class="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_16rem]">
                     <div ref="avatarFrame" class="relative mx-auto aspect-[3/5] max-h-[70vh] w-full max-w-sm touch-none overflow-hidden rounded-2xl bg-[var(--color-canvas)]" @pointermove="moveGarment" @pointerup="stopGarmentDrag" @pointercancel="stopGarmentDrag">
-                        <img :src="avatarService.imageUrl()" alt="Tu avatar privado" class="absolute inset-0 h-full w-full object-contain" draggable="false" />
-                        <div v-for="(garment, index) in [...tryOnOutfit.garments].sort((a, b) => (garmentPositions[a.id]?.z || 0) - (garmentPositions[b.id]?.z || 0))" :key="garment.id" :data-garment-id="garment.id" class="absolute cursor-move select-none touch-none" :style="{ left: `${garmentPositions[garment.id]?.x}%`, top: `${garmentPositions[garment.id]?.y}%`, width: `${garmentPositions[garment.id]?.width}%`, zIndex: garmentPositions[garment.id]?.z }" @pointerdown="startGarmentDrag($event, garment)">
+                        <img :src="avatarService.imageUrl()" alt="Tu avatar privado" class="absolute inset-0 h-full w-full object-contain" draggable="false" @load="detectAvatarZones" />
+                        <div v-for="(garment, index) in [...tryOnOutfit.garments].sort((a, b) => (garmentPositions[a.id]?.z || 0) - (garmentPositions[b.id]?.z || 0))" :key="garment.id" :data-garment-id="garment.id" class="absolute cursor-move select-none touch-none" :class="selectedTryOnGarmentId === garment.id ? 'outline outline-2 outline-offset-2 outline-[var(--color-primary)]' : ''" :style="{ left: `${garmentPositions[garment.id]?.x}%`, top: `${garmentPositions[garment.id]?.y}%`, width: `${garmentPositions[garment.id]?.width}%`, zIndex: garmentPositions[garment.id]?.z }" @pointerdown="startGarmentDrag($event, garment)">
                             <img v-if="garment.image_path" :src="wardrobe.imageUrl(garment.id)" :alt="garment.name" class="w-full object-contain drop-shadow-lg" :style="{ maxHeight: '11rem' }" draggable="false" />
                             <div v-else class="flex aspect-[4/5] items-center justify-center rounded-xl border-2 border-dashed border-[var(--color-primary)] bg-white/80 p-2 text-center text-xs font-medium">{{ garment.name }}</div>
                             <span class="pointer-events-none absolute inset-0 rounded border border-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.18)]"></span>
                         </div>
                     </div>
                     <div class="space-y-3">
+                        <p v-if="avatarDetectionMessage" class="rounded-xl bg-[var(--color-surface-muted)] p-3 text-xs leading-5 text-[var(--color-text-muted)]" role="status">{{ avatarDetectionMessage }}</p>
                         <button class="w-full rounded-xl bg-[var(--color-primary)] px-3 py-3 text-sm font-medium text-white disabled:opacity-50" :disabled="exportBusy" @click="saveTryOnImage">{{ exportBusy ? 'Preparando imagen…' : 'Guardar composición PNG' }}</button>
                         <p v-if="exportError" role="alert" class="rounded-lg bg-[var(--color-danger-surface)] p-2 text-xs text-[var(--color-danger-text)]">{{ exportError }}</p>
-                        <article v-for="garment in tryOnOutfit.garments" :key="garment.id" class="rounded-xl border border-[var(--color-border)] p-3">
-                            <p class="truncate text-xs font-semibold">{{ garment.name }}</p>
-                            <label class="mt-2 block text-[11px] text-[var(--color-text-muted)]">Tamaño <input type="range" min="12" max="70" :value="garmentPositions[garment.id]?.width" class="mt-1 w-full accent-[var(--color-primary)]" @input="resizeGarment(garment, $event)" /></label>
+                        <article v-for="garment in tryOnOutfit.garments" :key="garment.id" class="rounded-xl border p-3" :class="selectedTryOnGarmentId === garment.id ? 'border-[var(--color-primary)] bg-[var(--color-surface-muted)]' : 'border-[var(--color-border)]'">
+                            <button class="min-h-11 w-full truncate text-left text-sm font-semibold" :aria-pressed="selectedTryOnGarmentId === garment.id" @click="selectedTryOnGarmentId = garment.id">{{ garment.name }} <span class="text-xs font-normal text-[var(--color-text-subtle)]">· Tocar para ajustar</span></button>
+                            <div class="mt-2 grid grid-cols-3 gap-2" aria-label="Mover prenda">
+                                <span></span><button class="min-h-11 rounded-lg border border-[var(--color-border)] bg-white text-lg" aria-label="Mover arriba" @click="selectedTryOnGarmentId = garment.id; nudgeSelectedGarment('y', -2)">↑</button><span></span>
+                                <button class="min-h-11 rounded-lg border border-[var(--color-border)] bg-white text-lg" aria-label="Mover a la izquierda" @click="selectedTryOnGarmentId = garment.id; nudgeSelectedGarment('x', -2)">←</button><button class="min-h-11 rounded-lg border border-[var(--color-border)] bg-white text-xs" aria-label="Centrar prenda" @click="garmentPositions[garment.id] = defaultGarmentPosition(garment, tryOnOutfit.garments.indexOf(garment))">Centro</button><button class="min-h-11 rounded-lg border border-[var(--color-border)] bg-white text-lg" aria-label="Mover a la derecha" @click="selectedTryOnGarmentId = garment.id; nudgeSelectedGarment('x', 2)">→</button>
+                                <span></span><button class="min-h-11 rounded-lg border border-[var(--color-border)] bg-white text-lg" aria-label="Mover abajo" @click="selectedTryOnGarmentId = garment.id; nudgeSelectedGarment('y', 2)">↓</button><span></span>
+                            </div>
+                            <label class="mt-3 block text-xs font-medium text-[var(--color-text-muted)]">Tamaño <input type="range" min="12" max="70" :value="garmentPositions[garment.id]?.width" class="mt-2 min-h-11 w-full accent-[var(--color-primary)]" @focus="selectedTryOnGarmentId = garment.id" @input="resizeGarment(garment, $event)" /></label>
                         </article>
-                        <button class="w-full rounded-xl border border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-primary)]" @click="garmentPositions = Object.fromEntries(tryOnOutfit.garments.map((garment, index) => [garment.id, defaultGarmentPosition(garment, index)]))">Restablecer posiciones</button>
+                        <button class="w-full rounded-xl border border-[var(--color-border)] px-3 py-2 text-xs text-[var(--color-primary)]" @click="resetTryOnPositions">Restablecer posiciones</button>
                     </div>
                 </div>
             </section>

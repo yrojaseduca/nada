@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { garmentService } from '../services/garmentService';
 import { useWardrobeStore } from '../store/wardrobeStore';
 
@@ -12,6 +12,9 @@ const bulkMode = ref(false);
 const bulkCategory = ref('top');
 const bulkImages = ref([]);
 const bulkInput = ref(null);
+const bulkPreviews = ref([]);
+const enhanceBulkImages = ref(true);
+const smoothBulkWrinkles = ref(false);
 const bulkCreated = ref([]);
 const bulkReviewForms = ref({});
 const bulkSavedIds = ref([]);
@@ -19,11 +22,17 @@ const bulkSaveErrors = ref({});
 const savingBulkDetails = ref(false);
 const selectedBulkIds = ref([]);
 const bulkDefaults = reactive({ season: '', style: '', brand: '' });
+const bulkPendingFilter = ref('all');
+const savingVisiblePending = ref(false);
 const loading = ref(false);
 const error = ref('');
 const success = ref('');
 const image = ref(null);
+const enhanceImage = ref(true);
+const smoothWrinkles = ref(false);
 const preview = ref('');
+const enhancedPreview = ref('');
+let singlePreviewRequest = 0;
 const seasons = ['Primavera', 'Verano', 'Otoño', 'Invierno'];
 const styles = ['Casual', 'Elegante', 'Minimalista', 'Deportivo', 'Bohemio', 'Formal'];
 const form = reactive({ name: props.garment?.name || '', category: props.garment?.category || 'top', primary_color: props.garment?.primary_color || '', season: props.garment?.season || '', style: props.garment?.style || '', brand: props.garment?.brand || '', notes: props.garment?.notes || '' });
@@ -32,6 +41,7 @@ const resetForm = ({ category = 'top', style = '' } = {}) => {
     Object.assign(form, { name: '', category, primary_color: '', season: '', style, brand: '', notes: '' });
     image.value = null;
     preview.value = '';
+    enhancedPreview.value = '';
     const imageInput = document.getElementById('garment-image');
     if (imageInput) imageInput.value = '';
 };
@@ -49,6 +59,8 @@ const submit = async () => {
     try {
         const data = new FormData();
         Object.entries(form).forEach(([key, value]) => data.append(key, typeof value === 'string' ? value.trim() : value));
+        data.append('enhance_image', enhanceImage.value ? '1' : '0');
+        data.append('smooth_wrinkles', smoothWrinkles.value ? '1' : '0');
         if (image.value) data.append('image', image.value);
         if (props.garment) {
             await garmentService.update(props.garment.id, form);
@@ -80,7 +92,7 @@ const submitBulk = async () => {
     }
     loading.value = true;
     try {
-        const response = await garmentService.createMany(bulkCategory.value, bulkImages.value);
+        const response = await garmentService.createMany(bulkCategory.value, bulkImages.value, enhanceBulkImages.value, smoothBulkWrinkles.value);
         bulkCreated.value = response.data || [];
         bulkReviewForms.value = Object.fromEntries(bulkCreated.value.map((garment) => [garment.id, {
             name: garment.name,
@@ -126,6 +138,13 @@ const saveAllBulkDetails = async () => {
     savingBulkDetails.value = false;
 };
 
+const saveVisiblePending = async () => {
+    const pending = filteredBulkGarments.value.filter((garment) => !bulkSavedIds.value.includes(garment.id));
+    savingVisiblePending.value = true;
+    await Promise.all(pending.map((garment) => saveBulkDetails(garment)));
+    savingVisiblePending.value = false;
+};
+
 const applyBulkDefaults = () => {
     bulkCreated.value.forEach((garment) => {
         if (!selectedBulkIds.value.includes(garment.id)) return;
@@ -150,9 +169,45 @@ const toggleAllBulkSelection = () => {
         : bulkCreated.value.map((garment) => garment.id);
 };
 
+const filteredBulkGarments = computed(() => bulkCreated.value.filter((garment) => {
+    const details = bulkReviewForms.value[garment.id];
+    if (!details) return false;
+    if (bulkPendingFilter.value === 'all') return true;
+    if (bulkPendingFilter.value === 'incomplete') {
+        return !details.name.trim() || !details.primary_color || !details.season;
+    }
+    return !details[bulkPendingFilter.value]?.trim();
+}));
+
 const selectBulkImages = (event) => {
     bulkImages.value = Array.from(event.target.files || []);
+    bulkPreviews.value.forEach((preview) => {
+        URL.revokeObjectURL(preview.originalUrl);
+        URL.revokeObjectURL(preview.enhancedUrl);
+    });
+    bulkPreviews.value = bulkImages.value.map((file) => ({ file, originalUrl: URL.createObjectURL(file), enhancedUrl: '' }));
+    if (enhanceBulkImages.value || smoothBulkWrinkles.value) bulkPreviews.value.forEach(createEnhancedPreview);
     error.value = '';
+};
+
+const createEnhancedPreview = async (preview) => {
+    const requestId = (preview.previewRequest || 0) + 1;
+    preview.previewRequest = requestId;
+    if (preview.enhancedUrl) URL.revokeObjectURL(preview.enhancedUrl);
+    preview.enhancedUrl = '';
+    preview.previewLoading = true;
+    try {
+        const previewUrl = await garmentService.previewImage(preview.file, enhanceBulkImages.value, smoothBulkWrinkles.value);
+        if (preview.previewRequest !== requestId) {
+            URL.revokeObjectURL(previewUrl);
+            return;
+        }
+        preview.enhancedUrl = previewUrl;
+    } catch (requestError) {
+        error.value = requestError.message;
+    } finally {
+        preview.previewLoading = false;
+    }
 };
 
 const selectImage = (event) => {
@@ -160,6 +215,32 @@ const selectImage = (event) => {
     if (!selected) return;
     image.value = selected;
     preview.value = URL.createObjectURL(selected);
+    enhancedPreview.value = '';
+    if (enhanceImage.value || smoothWrinkles.value) createSingleEnhancedPreview(preview.value);
+};
+
+const createSingleEnhancedPreview = () => {
+    const requestId = ++singlePreviewRequest;
+    if (enhancedPreview.value.startsWith('blob:')) URL.revokeObjectURL(enhancedPreview.value);
+    enhancedPreview.value = '';
+    if (!image.value) return;
+    garmentService.previewImage(image.value, enhanceImage.value, smoothWrinkles.value)
+        .then((previewUrl) => {
+            if (requestId !== singlePreviewRequest) {
+                URL.revokeObjectURL(previewUrl);
+                return;
+            }
+            enhancedPreview.value = previewUrl;
+        })
+        .catch((requestError) => { error.value = requestError.message; });
+};
+
+const toggleSingleEnhancement = () => {
+    if ((enhanceImage.value || smoothWrinkles.value) && preview.value) createSingleEnhancedPreview(preview.value);
+};
+
+const toggleWrinkleSmoothing = () => {
+    if ((enhanceImage.value || smoothWrinkles.value) && preview.value) createSingleEnhancedPreview(preview.value);
 };
 </script>
 
@@ -183,7 +264,22 @@ const selectImage = (event) => {
             </div>
             <button type="button" class="rounded-full border border-[var(--color-primary)] px-4 py-2 text-xs font-medium text-[var(--color-primary)] disabled:opacity-50" :disabled="!selectedBulkIds.length || (!bulkDefaults.season && !bulkDefaults.style && !bulkDefaults.brand.trim())" @click="applyBulkDefaults">Aplicar datos seleccionados</button>
         </section>
-        <article v-for="garment in bulkCreated" :key="garment.id" class="grid grid-cols-[5rem_1fr] gap-3 rounded-2xl border border-[var(--color-border)] p-3">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <label for="bulk-pending-filter" class="text-sm font-medium">Mostrar</label>
+            <select id="bulk-pending-filter" v-model="bulkPendingFilter" class="rounded-xl border border-[var(--color-border)] bg-white px-3 py-2 pr-8 text-sm">
+                <option value="all">Todas ({{ bulkCreated.length }})</option>
+                <option value="incomplete">Con datos pendientes ({{ bulkCreated.filter((garment) => { const details = bulkReviewForms[garment.id]; return !details.name.trim() || !details.primary_color || !details.season; }).length }})</option>
+                <option value="name">Sin nombre ({{ bulkCreated.filter((garment) => !bulkReviewForms[garment.id].name.trim()).length }})</option>
+                <option value="primary_color">Sin color ({{ bulkCreated.filter((garment) => !bulkReviewForms[garment.id].primary_color).length }})</option>
+                <option value="season">Sin temporada ({{ bulkCreated.filter((garment) => !bulkReviewForms[garment.id].season).length }})</option>
+            </select>
+        </div>
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p class="text-xs text-[var(--color-text-subtle)]">{{ filteredBulkGarments.filter((garment) => bulkReviewForms[garment.id].name.trim() && !bulkSavedIds.includes(garment.id)).length }} visibles pendientes con nombre</p>
+            <button type="button" class="rounded-full border border-[var(--color-primary)] px-4 py-2 text-xs font-medium text-[var(--color-primary)] disabled:opacity-50" :disabled="savingVisiblePending || !filteredBulkGarments.some((garment) => bulkReviewForms[garment.id].name.trim() && !bulkSavedIds.includes(garment.id))" @click="saveVisiblePending">{{ savingVisiblePending ? 'Guardando…' : 'Guardar todas las pendientes' }}</button>
+        </div>
+        <p v-if="!filteredBulkGarments.length" class="rounded-xl bg-[var(--color-surface-muted)] p-4 text-center text-sm text-[var(--color-text-subtle)]">No hay prendas con este filtro.</p>
+        <article v-for="garment in filteredBulkGarments" :key="garment.id" class="grid grid-cols-[5rem_1fr] gap-3 rounded-2xl border border-[var(--color-border)] p-3">
             <div class="flex flex-col items-center gap-2"><input type="checkbox" :checked="selectedBulkIds.includes(garment.id)" :aria-label="`Seleccionar ${bulkReviewForms[garment.id].name}`" class="h-4 w-4 accent-[var(--color-primary)]" @change="toggleBulkSelection(garment.id)" /><img :src="wardrobeImageUrl(garment.id)" :alt="bulkReviewForms[garment.id].name" class="h-20 w-20 rounded-xl bg-[var(--color-surface-muted)] object-cover" /></div>
             <div class="min-w-0 space-y-2">
                 <input v-model="bulkReviewForms[garment.id].name" :aria-label="`Nombre para ${garment.name}`" class="w-full rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm" placeholder="Nombre de la prenda" />
@@ -198,7 +294,7 @@ const selectImage = (event) => {
                 <p v-if="bulkSaveErrors[garment.id]" class="text-xs text-red-700" role="alert">{{ bulkSaveErrors[garment.id] }}</p>
             </div>
         </article>
-        <div class="flex items-center justify-between"><p class="text-xs text-[var(--color-text-subtle)]">{{ bulkSavedIds.length }} de {{ bulkCreated.length }} guardadas</p><button type="button" class="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white" @click="bulkCreated = []; bulkReviewForms = {}; bulkSavedIds = []; bulkSaveErrors = {}; emit('cancel')">Listo</button></div>
+        <div class="flex items-center justify-between"><p class="text-xs text-[var(--color-text-subtle)]">{{ bulkSavedIds.length }} de {{ bulkCreated.length }} guardadas</p><button type="button" class="rounded-full bg-[var(--color-primary)] px-5 py-2 text-sm font-medium text-white" @click="bulkCreated = []; bulkReviewForms = {}; bulkSavedIds = []; bulkSaveErrors = {}; selectedBulkIds = []; bulkPendingFilter = 'all'; emit('cancel')">Listo</button></div>
     </section>
     <form v-else-if="bulkMode && !props.garment" class="space-y-4" @submit.prevent="submitBulk">
         <div>
@@ -212,9 +308,16 @@ const selectImage = (event) => {
             <input id="bulk-images" ref="bulkInput" type="file" accept="image/jpeg,image/png,image/webp" multiple class="mt-2 block w-full rounded-xl border border-[var(--color-border)] p-3 text-sm" @change="selectBulkImages" />
             <p class="mt-1 text-xs text-[var(--color-text-subtle)]">JPG, PNG o WEBP · Máximo 5 MB por imagen</p>
         </div>
-        <ul v-if="bulkImages.length" class="max-h-32 space-y-1 overflow-y-auto rounded-xl bg-[var(--color-surface-muted)] p-3 text-sm">
-            <li v-for="file in bulkImages" :key="`${file.name}-${file.lastModified}`" class="truncate">{{ file.name }}</li>
-        </ul>
+        <div class="space-y-2">
+            <label class="flex items-start gap-2 text-xs leading-5 text-[var(--color-text-subtle)]"><input v-model="enhanceBulkImages" type="checkbox" class="mt-1 accent-[var(--color-primary)]" @change="(enhanceBulkImages || smoothBulkWrinkles) && bulkPreviews.forEach(createEnhancedPreview)" />Aclarar fotos oscuras de forma suave.</label>
+            <label class="flex items-start gap-2 text-xs leading-5 text-[var(--color-text-subtle)]"><input v-model="smoothBulkWrinkles" type="checkbox" class="mt-1 accent-[var(--color-primary)]" @change="(enhanceBulkImages || smoothBulkWrinkles) && bulkPreviews.forEach(createEnhancedPreview)" />Suavizar ligeramente pliegues finos, manteniendo la foto original.</label>
+        </div>
+        <div v-if="bulkPreviews.length" class="max-h-72 space-y-3 overflow-y-auto">
+            <article v-for="preview in bulkPreviews" :key="`${preview.file.name}-${preview.file.lastModified}`" class="rounded-xl border border-[var(--color-border)] p-3">
+                <p class="mb-2 truncate text-xs font-medium">{{ preview.file.name }}</p>
+                <div class="grid grid-cols-2 gap-2"><div><img :src="preview.originalUrl" :alt="`Original: ${preview.file.name}`" class="aspect-square w-full rounded-lg object-contain bg-[var(--color-surface-muted)]" /><p class="mt-1 text-center text-[10px]">Original</p></div><div><img :src="(enhanceBulkImages || smoothBulkWrinkles) ? (preview.enhancedUrl || preview.originalUrl) : preview.originalUrl" :alt="`Vista previa mejorada: ${preview.file.name}`" class="aspect-square w-full rounded-lg object-contain bg-[var(--color-surface-muted)]" /><p class="mt-1 text-center text-[10px]">{{ (enhanceBulkImages || smoothBulkWrinkles) ? 'Mejorada (vista previa)' : 'Sin cambios' }}</p></div></div>
+            </article>
+        </div>
         <p v-if="error" class="rounded-xl bg-red-50 p-3 text-sm text-red-700" role="alert">{{ error }}</p>
         <p v-if="success" class="rounded-xl bg-green-50 p-3 text-sm text-green-800" role="status">{{ success }}</p>
         <div class="flex justify-end gap-3">
@@ -237,7 +340,9 @@ const selectImage = (event) => {
                 <span v-if="image" class="mt-3 rounded-full bg-[var(--color-border)] px-3 py-1 text-xs font-medium text-[var(--color-primary)]">{{ image.name }}</span>
                 <input id="garment-image" type="file" accept="image/jpeg,image/png,image/webp" class="sr-only" @change="selectImage" />
             </label>
-            <img v-if="preview" :src="preview" alt="Previsualización de la prenda" class="mt-3 h-32 w-full rounded-2xl object-cover" />
+            <div v-if="preview" class="mt-3 grid grid-cols-2 gap-2"><div><img :src="preview" alt="Foto original de la prenda" class="aspect-square w-full rounded-xl bg-[var(--color-surface-muted)] object-contain" /><p class="mt-1 text-center text-xs">Original</p></div><div><img :src="enhanceImage || smoothWrinkles ? (enhancedPreview || preview) : preview" alt="Vista previa mejorada de la prenda" class="aspect-square w-full rounded-xl bg-[var(--color-surface-muted)] object-contain" /><p class="mt-1 text-center text-xs">{{ enhanceImage || smoothWrinkles ? 'Mejorada (vista previa)' : 'Sin cambios' }}</p></div></div>
+            <label class="mt-3 flex items-start gap-2 text-xs leading-5 text-[var(--color-text-subtle)]"><input v-model="enhanceImage" type="checkbox" class="mt-1 accent-[var(--color-primary)]" @change="toggleSingleEnhancement" />Mejorar luz y reducir suavemente el ruido al guardar. Se conserva la foto original en el servidor.</label>
+            <label class="mt-2 flex items-start gap-2 text-xs leading-5 text-[var(--color-text-subtle)]"><input v-model="smoothWrinkles" type="checkbox" class="mt-1 accent-[var(--color-primary)]" @change="toggleWrinkleSmoothing" />Suavizar ligeramente pliegues finos (puede reducir algo la textura).</label>
         </div>
         <div>
             <label class="text-sm font-medium" for="garment-name">Nombre</label>

@@ -13,6 +13,7 @@ use App\Services\OutfitRecommendationService;
 use App\Services\UserPreferenceService;
 use App\Services\ColorimetryService;
 use App\Services\UserAvatarService;
+use App\Services\GarmentImageEnhancer;
 
 return static function (Base $f3): void {
     $f3->route('GET /api/health', static function (): void {
@@ -290,9 +291,43 @@ return static function (Base $f3): void {
         JsonResponse::send(['data' => $garments->create((int) $user['id'], $payload)], 201);
     });
 
+    $f3->route('POST /api/garments/preview-image', static function () use ($auth): void {
+        authenticatedUser($auth);
+        $file = $_FILES['image'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || ($file['size'] ?? 0) > 5 * 1024 * 1024) {
+            JsonResponse::send(['message' => 'La imagen no es válida o supera los 5 MB.'], 422);
+        }
+        $mimeType = mime_content_type((string) $file['tmp_name']);
+        if (!in_array($mimeType, ['image/jpeg', 'image/png', 'image/webp'], true)) {
+            JsonResponse::send(['message' => 'Solo se admiten imágenes JPG, PNG o WEBP.'], 422);
+        }
+
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'nido-preview-');
+        $enhancedPath = tempnam(sys_get_temp_dir(), 'nido-enhanced-');
+        if ($temporaryPath === false || $enhancedPath === false || !copy((string) $file['tmp_name'], $temporaryPath)) {
+            JsonResponse::send(['message' => 'No se pudo preparar la vista previa.'], 500);
+        }
+        $enhanced = false;
+        try {
+            $enhanced = (new GarmentImageEnhancer())->enhance($temporaryPath, $enhancedPath, $mimeType, ($_POST['smooth_wrinkles'] ?? '0') === '1', ($_POST['enhance_image'] ?? '1') === '1');
+            $previewContents = $enhanced ? file_get_contents($enhancedPath) : false;
+        } finally {
+            @unlink($temporaryPath);
+            @unlink($enhancedPath);
+        }
+        if (!is_string($previewContents ?? false)) {
+            JsonResponse::send(['message' => 'No se pudo mejorar esta imagen.'], 422);
+        }
+        header('Content-Type: ' . $mimeType);
+        header('Cache-Control: no-store');
+        echo $previewContents;
+        exit;
+    });
+
     $f3->route('POST /api/garments/bulk', static function () use ($auth, $garments): void {
         $user = authenticatedUser($auth);
         $category = trim((string) ($_POST['category'] ?? ''));
+        $enhanceImage = ($_POST['enhance_image'] ?? '0') === '1';
         $files = $_FILES['images'] ?? null;
         if ($category === '' || !is_array($files) || !is_array($files['name'] ?? null)) {
             JsonResponse::send(['message' => 'Selecciona una categoría y al menos una imagen.'], 422);
@@ -314,7 +349,7 @@ return static function (Base $f3): void {
                 JsonResponse::send(['message' => 'No se pudo validar una de las imágenes.'], 422);
             }
 
-            $payload = uploadGarmentImage(['name' => pathinfo((string) $originalName, PATHINFO_FILENAME), 'category' => $category], (int) $user['id'], $file);
+            $payload = uploadGarmentImage(['name' => pathinfo((string) $originalName, PATHINFO_FILENAME), 'category' => $category, 'enhance_image' => $enhanceImage ? '1' : '0', 'smooth_wrinkles' => ($_POST['smooth_wrinkles'] ?? '0') === '1' ? '1' : '0'], (int) $user['id'], $file);
             validateGarmentPayload($payload);
             $created[] = $garments->create((int) $user['id'], $payload);
         }
@@ -406,6 +441,16 @@ function uploadGarmentImage(array $payload, int $userId, ?array $fileOverride = 
     $filename = bin2hex(random_bytes(16)) . '.' . $extension;
     move_uploaded_file((string) $uploadedFile['tmp_name'], $directory . '/' . $filename);
     $payload['image_path'] = '/storage/garments/' . $userId . '/' . $filename;
+
+    if (($payload['enhance_image'] ?? '0') === '1' || ($payload['smooth_wrinkles'] ?? '0') === '1') {
+        $originalPath = $directory . '/' . $filename . '.original';
+        if (rename($directory . '/' . $filename, $originalPath)) {
+            $enhanced = (new GarmentImageEnhancer())->enhance($originalPath, $directory . '/' . $filename, 'image/' . ($extension === 'jpg' ? 'jpeg' : $extension), ($payload['smooth_wrinkles'] ?? '0') === '1', ($payload['enhance_image'] ?? '0') === '1');
+            if (!$enhanced) {
+                rename($originalPath, $directory . '/' . $filename);
+            }
+        }
+    }
 
     return $payload;
 }
