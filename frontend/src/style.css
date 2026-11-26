@@ -1,13 +1,50 @@
 @import 'tailwindcss';
 
 :root {
-    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-    color: #252238;
-    background: #faf9ff;
+    color-scheme: light;
+    --color-canvas: #FAF8F4;
+    --color-surface: #FFFFFF;
+    --color-surface-muted: #F3ECE4;
+    --color-border: #E9D9C9;
+    --color-text: #282724;
+    --color-text-muted: #6E695F;
+    --color-text-subtle: #8E857A;
+    --color-primary: #4D5145;
+    --color-primary-hover: #3D4137;
+    --color-accent: #B7A18D;
+    --color-danger: #B95750;
+    --color-danger-surface: #FDEDEC;
+    --color-danger-text: #A23B35;
+    --color-danger-border: #EADBD9;
+    --color-upload-surface: #FCF9F5;
+    --color-upload-hover: #F9F3EC;
+    --color-upload-border-hover: #A99A89;
+    --color-login-accent: #A87569;
+    --color-login-surface: #FDFCFA;
+    --color-neutral-surface: #F0EBE5;
+    --color-neutral-text: #8E7472;
+    --color-overlay: rgb(40 39 36 / 40%);
+}
+
+@theme {
+    --color-canvas: #FAF8F4;
+    --color-surface: #FFFFFF;
+    --color-surface-muted: #F3ECE4;
+    --color-border: #E9D9C9;
+    --color-text: #282724;
+    --color-text-muted: #6E695F;
+    --color-text-subtle: #8E857A;
+    --color-primary: #4D5145;
+    --color-primary-hover: #3D4137;
+    --color-accent: #B7A18D;
+    --color-danger: #B95750;
 }
 
 body {
     margin: 0;
+    background: var(--color-canvas);
+    color: var(--color-text);
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 
 select {
@@ -17,6 +54,16 @@ select {
     background-repeat: no-repeat;
     background-size: 1rem;
     padding-right: 2.75rem;
+}
+
+select option:checked {
+    background-color: var(--color-surface-muted);
+    color: var(--color-text);
+}
+
+button[aria-expanded] {
+    align-items: center;
+    display: inline-flex;
 }
 
 .app-shell {

@@ -4,10 +4,18 @@ import { garmentService } from '../services/garmentService';
 
 export const useWardrobeStore = defineStore('wardrobe', () => {
     const garments = ref([]);
-    const filters = ref({ category: '', search: '' });
+    const filters = ref({ category: '', search: '', favorites: false, color: '', season: '', style: '' });
+    const favoriteOnly = computed(() => filters.value.favorites);
     const loading = ref(false);
     const error = ref('');
-    const totalGarments = computed(() => garments.value.length);
+    const visibleGarments = computed(() => garments.value.filter((garment) => {
+        if (favoriteOnly.value && !garment.is_favorite) return false;
+        if (filters.value.color && garment.primary_color !== filters.value.color) return false;
+        if (filters.value.season && garment.season !== filters.value.season) return false;
+        if (filters.value.style && garment.style !== filters.value.style) return false;
+        return true;
+    }));
+    const totalGarments = computed(() => visibleGarments.value.length);
 
     const loadGarments = async () => {
         loading.value = true;
@@ -32,6 +40,19 @@ export const useWardrobeStore = defineStore('wardrobe', () => {
         await loadGarments();
     };
 
+    const clearFilters = async () => {
+        filters.value = { category: '', search: '', favorites: false, color: '', season: '', style: '' };
+        await loadGarments();
+    };
+
+    const toggleFavorites = () => {
+        filters.value.favorites = !filters.value.favorites;
+    };
+
+    const setFilter = (name, value) => {
+        filters.value[name] = value;
+    };
+
     const toggleFavorite = async (garment) => {
         const response = await garmentService.toggleFavorite(garment.id);
         const index = garments.value.findIndex((item) => item.id === garment.id);
@@ -45,5 +66,5 @@ export const useWardrobeStore = defineStore('wardrobe', () => {
         garments.value = garments.value.filter((garment) => garment.id !== id);
     };
 
-    return { garments, filters, loading, error, totalGarments, loadGarments, setCategory, setSearch, toggleFavorite, imageUrl, removeGarment };
+    return { garments, visibleGarments, filters, favoriteOnly, loading, error, totalGarments, loadGarments, setCategory, setSearch, clearFilters, toggleFavorites, setFilter, toggleFavorite, imageUrl, removeGarment };
 });

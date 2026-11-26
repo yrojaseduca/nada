@@ -11,6 +11,8 @@ use App\Services\UserManagementService;
 use App\Services\OutfitService;
 use App\Services\OutfitRecommendationService;
 use App\Services\UserPreferenceService;
+use App\Services\ColorimetryService;
+use App\Services\UserAvatarService;
 
 return static function (Base $f3): void {
     $f3->route('GET /api/health', static function (): void {
@@ -30,6 +32,132 @@ return static function (Base $f3): void {
     $outfits = new OutfitService();
     $recommendations = new OutfitRecommendationService();
     $preferences = new UserPreferenceService();
+    $colorimetry = new ColorimetryService();
+    $avatars = new UserAvatarService();
+
+    $f3->route('GET /api/avatar', static function () use ($auth, $avatars): void {
+        $user = authenticatedUser($auth);
+        JsonResponse::send(['data' => ['exists' => $avatars->get((int) $user['id']) !== null]]);
+    });
+
+    $f3->route('POST /api/avatar', static function () use ($auth, $avatars): void {
+        $user = authenticatedUser($auth);
+        if (($_POST['consent'] ?? '') !== '1') {
+            JsonResponse::send(['message' => 'Debes aceptar el almacenamiento privado para continuar.'], 422);
+        }
+        $file = $_FILES['image'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || ($file['size'] ?? 0) > 8 * 1024 * 1024) {
+            JsonResponse::send(['message' => 'Selecciona una foto válida de hasta 8 MB.'], 422);
+        }
+        $extension = match (mime_content_type((string) $file['tmp_name'])) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            default => null,
+        };
+        if ($extension === null) {
+            JsonResponse::send(['message' => 'Solo se admiten imágenes JPG, PNG o WEBP.'], 422);
+        }
+        $userId = (int) $user['id'];
+        $directory = dirname(__DIR__, 2) . '/storage/avatars/' . $userId;
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            JsonResponse::send(['message' => 'No se pudo preparar el almacenamiento privado.'], 500);
+        }
+        $filename = bin2hex(random_bytes(16)) . '.' . $extension;
+        if (!move_uploaded_file((string) $file['tmp_name'], $directory . '/' . $filename)) {
+            JsonResponse::send(['message' => 'No se pudo guardar la foto.'], 500);
+        }
+        $relativePath = '/storage/avatars/' . $userId . '/' . $filename;
+        try {
+            $oldPath = $avatars->get($userId);
+        } catch (Throwable $exception) {
+            unlink($directory . '/' . $filename);
+            throw $exception;
+        }
+        try {
+            $avatars->save($userId, $relativePath);
+        } catch (Throwable $exception) {
+            unlink($directory . '/' . $filename);
+            throw $exception;
+        }
+        deletePrivateStorageFile($oldPath);
+        JsonResponse::send(['message' => 'Avatar guardado de forma privada.']);
+    });
+
+    $f3->route('GET /api/avatar/image', static function () use ($auth, $avatars): void {
+        $user = authenticatedUser($auth);
+        servePrivateStorageFile($avatars->get((int) $user['id']));
+    });
+
+    $f3->route('DELETE /api/avatar', static function () use ($auth, $avatars): void {
+        $user = authenticatedUser($auth);
+        deletePrivateStorageFile($avatars->delete((int) $user['id']));
+        JsonResponse::send(['message' => 'Avatar eliminado.']);
+    });
+
+    $f3->route('GET /api/colorimetry', static function () use ($auth, $colorimetry): void {
+        $user = authenticatedUser($auth);
+        JsonResponse::send(['data' => $colorimetry->get((int) $user['id'])]);
+    });
+
+    $f3->route('POST /api/colorimetry', static function () use ($auth, $colorimetry): void {
+        $user = authenticatedUser($auth);
+        $file = $_FILES['image'] ?? null;
+        if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK || ($file['size'] ?? 0) > 5 * 1024 * 1024) {
+            JsonResponse::send(['message' => 'Selecciona una imagen válida de hasta 5 MB.'], 422);
+        }
+        $extension = match (mime_content_type((string) $file['tmp_name'])) {
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/webp' => 'webp',
+            default => null,
+        };
+        if ($extension === null) {
+            JsonResponse::send(['message' => 'Solo se admiten imágenes JPG, PNG o WEBP.'], 422);
+        }
+        $payload = json_decode((string) ($_POST['result'] ?? ''), true);
+        if (!is_array($payload) || !in_array($payload['season'] ?? '', ['Primavera cálida', 'Verano suave', 'Otoño cálido', 'Invierno frío', 'Paleta neutra'], true)) {
+            JsonResponse::send(['message' => 'El resultado de colorimetría no es válido.'], 422);
+        }
+
+        $userId = (int) $user['id'];
+        $directory = dirname(__DIR__, 2) . '/storage/colorimetry/' . $userId;
+        if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory)) {
+            JsonResponse::send(['message' => 'No se pudo preparar el almacenamiento privado.'], 500);
+        }
+        $filename = bin2hex(random_bytes(16)) . '.' . $extension;
+        if (!move_uploaded_file((string) $file['tmp_name'], $directory . '/' . $filename)) {
+            JsonResponse::send(['message' => 'No se pudo guardar la fotografía.'], 500);
+        }
+        $relativePath = '/storage/colorimetry/' . $userId . '/' . $filename;
+        try {
+            $oldRecord = $colorimetry->get($userId);
+        } catch (Throwable $exception) {
+            unlink($directory . '/' . $filename);
+            throw $exception;
+        }
+        try {
+            $colorimetry->save($userId, $relativePath, $payload);
+        } catch (Throwable $exception) {
+            unlink($directory . '/' . $filename);
+            throw $exception;
+        }
+        deletePrivateStorageFile(is_array($oldRecord) ? (string) $oldRecord['image_path'] : null);
+        JsonResponse::send(['data' => ['result' => $payload]]);
+    });
+
+    $f3->route('GET /api/colorimetry/image', static function () use ($auth, $colorimetry): void {
+        $user = authenticatedUser($auth);
+        $record = $colorimetry->get((int) $user['id']);
+        servePrivateStorageFile(is_array($record) ? (string) $record['image_path'] : null);
+    });
+
+    $f3->route('DELETE /api/colorimetry', static function () use ($auth, $colorimetry): void {
+        $user = authenticatedUser($auth);
+        $path = $colorimetry->delete((int) $user['id']);
+        deletePrivateStorageFile($path);
+        JsonResponse::send(['message' => 'Fotografía y análisis eliminados.']);
+    });
 
     $f3->route('POST /api/auth/login', static function () use ($auth): void {
         $payload = requestPayload();
@@ -248,6 +376,39 @@ function uploadGarmentImage(array $payload, int $userId): array
     $payload['image_path'] = '/storage/garments/' . $userId . '/' . $filename;
 
     return $payload;
+}
+
+function resolvePrivateStorageFile(?string $relativePath): string|false
+{
+    $storageRoot = realpath(dirname(__DIR__, 2) . '/storage');
+    if ($relativePath === null || preg_match('#^/storage/(?:avatars|colorimetry)/[1-9][0-9]*/[a-f0-9]{32}\.(?:jpg|png|webp)$#', $relativePath) !== 1) {
+        return false;
+    }
+    $imagePath = $storageRoot !== false ? realpath(dirname(__DIR__, 2) . $relativePath) : false;
+
+    return $storageRoot !== false && $imagePath !== false && str_starts_with($imagePath, $storageRoot . DIRECTORY_SEPARATOR) && is_file($imagePath)
+        ? $imagePath
+        : false;
+}
+
+function servePrivateStorageFile(?string $relativePath): never
+{
+    $imagePath = resolvePrivateStorageFile($relativePath);
+    if ($imagePath === false) {
+        JsonResponse::send(['message' => 'Imagen no encontrada.'], 404);
+    }
+    header('Content-Type: ' . (mime_content_type($imagePath) ?: 'application/octet-stream'));
+    header('Cache-Control: private, no-store');
+    readfile($imagePath);
+    exit;
+}
+
+function deletePrivateStorageFile(?string $relativePath): void
+{
+    $imagePath = resolvePrivateStorageFile($relativePath);
+    if ($imagePath !== false) {
+        unlink($imagePath);
+    }
 }
 
 function bearerToken(): string
