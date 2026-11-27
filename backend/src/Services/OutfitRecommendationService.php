@@ -95,16 +95,16 @@ final class OutfitRecommendationService
 
     private static function paletteColorScore(string $color, string $palette): int
     {
-        $garmentColors = [
+        $garmentColors = array(
             'negro' => '#282724', 'blanco' => '#ffffff', 'gris' => '#8e857a', 'azul' => '#426a8c',
             'rojo' => '#b95750', 'verde' => '#668267', 'marrón' => '#8b654d', 'marron' => '#8b654d',
             'beige' => '#dccbb9', 'rosa' => '#d99ba4', 'amarillo' => '#d7b84b',
-        };
+        );
         $palettes = [
             'warm' => ['#A64E3C', '#D58B55', '#D8B65C', '#6D8054', '#2F625A', '#8C514B'],
             'cool' => ['#6D7896', '#788DA8', '#658A83', '#8B7189', '#A96878', '#525E78'],
             'neutral' => ['#8A7867', '#B49B7D', '#879078', '#7E8585', '#A08078', '#655E58'],
-        ];
+        );
         $normalizedColor = mb_strtolower(trim($color));
         $hex = $garmentColors[$normalizedColor] ?? null;
         if ($hex === null || !isset($palettes[$palette])) return 0;
